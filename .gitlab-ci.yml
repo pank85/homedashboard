@@ -15,6 +15,11 @@ stages:
 
 variables:
   DOCKER_TLS_CERTDIR: "/certs"
+  # A dind service starts with no insecure registries, and GitLab CI does not expand
+  # variables inside a service `command`, so this value has to be literal. Change it
+  # if your instance advertises a different registry, or delete the `command:` line
+  # when your registry is served over HTTPS.
+  REGISTRY_INSECURE_HOST: "dockerhub.pkatopodis.me:5050"
 
 build-image:
   stage: build
@@ -22,7 +27,7 @@ build-image:
   services:
     - name: docker:27.0.3-dind
       alias: docker
-      command: ["--insecure-registry=$CI_REGISTRY"]
+      command: ["--insecure-registry=dockerhub.pkatopodis.me:5050"]
   rules:
     - if: $CI_COMMIT_BRANCH
   before_script:
