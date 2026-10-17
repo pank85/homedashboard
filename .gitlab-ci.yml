@@ -1,6 +1,6 @@
 # GitLab CE + the shared gitlab-runner (docker executor, privileged dind).
 #
-# This mirrors the pattern already proven on this instance by
+# The build shape mirrors the pattern already proven on this instance by
 # pank85/GroceryMoneySaver-Web, because the default shape does not work here:
 #
 #   * The instance advertises the registry as plain HTTP on <host>:5050, and a dind
@@ -11,12 +11,20 @@
 #     explicit `entrypoint: ["dockerd"]`, otherwise the arguments are not applied.
 #   * DOCKER_HOST + DOCKER_TLS_CERTDIR="" skip the certificate dance.
 #
-# The image path is derived from CI_PROJECT_PATH, so the only instance-shaped value is
-# the registry host. On an instance with an HTTPS registry, drop the CI_REGISTRY
-# override and the dind entrypoint/command and this file works unchanged.
+# The deploy stage mirrors pank85/bettips-ai: SSH to the homeserver, pull the freshly
+# pushed :latest, then restart the systemd unit that owns the compose project. Two
+# details matter: the build must have moved :latest (the pull fetches exactly that), and
+# the unit restart is what recreates the container — `docker compose pull` alone changes
+# nothing. Requires the protected CI variable `SSH_PRIVATE_KEY`.
+#
+# The image path is derived from CI_PROJECT_PATH, so the only instance-shaped values are
+# the registry host and the homeserver address. On an instance with an HTTPS registry,
+# drop the CI_REGISTRY override and the dind entrypoint/command and this file works
+# unchanged.
 
 stages:
   - build
+  - deploy
 
 variables:
   CI_REGISTRY: "dockerhub.pkatopodis.me"
@@ -46,3 +54,25 @@ build-image:
         docker tag "$IMAGE:$CI_COMMIT_SHA" "$IMAGE:latest"
         docker push "$IMAGE:latest"
       fi
+
+deploy:
+  stage: deploy
+  image: alpine:latest
+  needs: ["build-image"]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh
+    - printf '%s' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H 172.16.0.50 >> ~/.ssh/known_hosts 2>/dev/null
+  script:
+    - echo "Deploying $CI_COMMIT_SHA to the homeserver"
+    - |
+      ssh -o StrictHostKeyChecking=no pank@172.16.0.50 "
+        cd ~/homeserver/docker-compose/homedashboard &&
+        sudo docker compose pull &&
+        sudo systemctl restart docker-compose@homedashboard
+      "
+    - echo "Deployment complete"
