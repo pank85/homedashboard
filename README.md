@@ -115,6 +115,7 @@ The app reads these through `load_settings`. Defaults are generic. No hostnames,
 | `DOCKER_SOCKET` | `/var/run/docker.sock` | str. Also the host-side socket path in compose. |
 | `DOCKER_API_VERSION` | `v1.41` | str. Override if the engine differs. |
 | `DOCKER_TIMEOUT_SECONDS` | `3` | float. |
+| `CONTAINER_FETCH_WORKERS` | `8` | int. Parallel per-container Docker API fetches; minimum `1`. |
 | `HERDR_BIN` | `herdr` | str. |
 | `HERDR_TIMEOUT_SECONDS` | `3` | float. |
 | `HERDR_MODE` | `embedded` | `embedded` \| `external` \| `off`. Settings: any other value becomes `embedded` (href default only). Entrypoint: unknown does not start herdr. |

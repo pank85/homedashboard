@@ -7,11 +7,16 @@ call degrades to an unavailable payload and is not raised to the route.
 from __future__ import annotations
 
 import json
+import os
 import socket
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from http.client import HTTPConnection
 from typing import Any
+
+DEFAULT_CONTAINER_FETCH_WORKERS = 8
+_CONTAINER_FETCH_WORKERS_ENV = "CONTAINER_FETCH_WORKERS"
 
 
 def cpu_percent_from_stats(stats: dict) -> float | None:
@@ -43,8 +48,15 @@ def collect_containers(
     timeout: float = 3.0,
     now: datetime | None = None,
     client: Any | None = None,
+    workers: int | None = None,
 ) -> dict:
-    """List containers. Never raises; list failures set ``available`` false."""
+    """List containers. Never raises; list failures set ``available`` false.
+
+    The list call runs first and sequentially; the per-container detail calls
+    run concurrently, bounded by ``workers`` (falling back to the
+    ``CONTAINER_FETCH_WORKERS`` env var, then the default). Row order never
+    depends on completion order.
+    """
     moment = datetime.now(timezone.utc)
     try:
         moment = _as_utc(now)
@@ -58,14 +70,8 @@ def collect_containers(
             return _list_failure(moment, socket_path, exc)
         if not isinstance(listed, list):
             return _unavailable(moment, "malformed JSON from docker API")
-        rows: list[dict] = []
-        for item in listed:
-            if not isinstance(item, dict):
-                continue
-            try:
-                rows.append(_one_container(api, version, item, moment))
-            except Exception:
-                rows.append(_row_from_list(item))
+        items = [item for item in listed if isinstance(item, dict)]
+        rows = _fetch_rows(api, version, items, moment, _resolve_workers(workers))
         rows.sort(key=_sort_key)
         return {
             "available": True,
@@ -182,6 +188,57 @@ def _one_container(api: Any, version: str, item: dict, moment: datetime) -> dict
             row["memory_used_bytes"] = used
             row["memory_limit_bytes"] = limit
     return row
+
+
+def _resolve_workers(workers: int | None) -> int:
+    """Resolve the fetch concurrency, clamped to a minimum of 1."""
+    if workers is None:
+        workers = _workers_from_env()
+    try:
+        resolved = int(workers)
+    except (TypeError, ValueError):
+        resolved = DEFAULT_CONTAINER_FETCH_WORKERS
+    return max(1, resolved)
+
+
+def _workers_from_env() -> int:
+    raw = os.environ.get(_CONTAINER_FETCH_WORKERS_ENV)
+    if raw is None or raw.strip() == "":
+        return DEFAULT_CONTAINER_FETCH_WORKERS
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return DEFAULT_CONTAINER_FETCH_WORKERS
+
+
+def _fetch_rows(
+    api: Any, version: str, items: list[dict], moment: datetime, workers: int
+) -> list[dict]:
+    """Fetch per-container rows, preserving the input order analogous to the
+    sequential implementation. A worker exception never escapes; it degrades
+    that container to its list-only row."""
+    if not items:
+        return []
+    if workers <= 1 or len(items) == 1:
+        rows: list[dict] = []
+        for item in items:
+            try:
+                rows.append(_one_container(api, version, item, moment))
+            except Exception:
+                rows.append(_row_from_list(item))
+        return rows
+    ordered: list[dict | None] = [None] * len(items)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            (index, executor.submit(_one_container, api, version, item, moment))
+            for index, item in enumerate(items)
+        ]
+        for index, future in futures:
+            try:
+                ordered[index] = future.result()
+            except Exception:
+                ordered[index] = _row_from_list(items[index])
+    return [row for row in ordered if row is not None]
 
 
 def _get_optional(api: Any, path: str, params: dict | None = None) -> Any:

@@ -35,6 +35,7 @@ class Settings:
     docker_socket: str
     docker_api_version: str
     docker_timeout_seconds: float
+    container_fetch_workers: int
     herdr_bin: str
     herdr_timeout_seconds: float
     herdr_mode: str
@@ -104,6 +105,9 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
         docker_api_version=env.get("DOCKER_API_VERSION", "v1.41"),
         docker_timeout_seconds=_parse_float(
             env.get("DOCKER_TIMEOUT_SECONDS"), 3.0
+        ),
+        container_fetch_workers=max(
+            1, _parse_int(env.get("CONTAINER_FETCH_WORKERS"), 8)
         ),
         herdr_bin=env.get("HERDR_BIN", "herdr"),
         herdr_timeout_seconds=_parse_float(env.get("HERDR_TIMEOUT_SECONDS"), 3.0),

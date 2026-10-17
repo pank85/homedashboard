@@ -9,6 +9,7 @@ import json
 import os
 import socket
 import threading
+import time
 from datetime import datetime, timezone
 
 from app.collectors.docker import collect_containers, cpu_percent_from_stats
@@ -536,3 +537,206 @@ def test_default_client_get_only_round_trip(tmp_path):
     )
     assert any("stream=false" in target for target in targets)
     assert not any(method != "GET" for method, _target in stub.requests)
+
+
+def test_rows_identical_across_worker_counts(monkeypatch):
+    specs = {
+        "d": ("exited", None),
+        "b": ("running", "healthy"),
+        "a2": ("running", "healthy"),
+        "c": ("restarting", None),
+        "a": ("running", "unhealthy"),
+    }
+
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            assert params == {"all": "1"}
+            return [
+                {
+                    "Id": f"id-{name}",
+                    "Names": ["/" + name],
+                    "Image": f"img:{name}",
+                    "State": status,
+                }
+                for name, (status, _health) in specs.items()
+            ]
+        for name in specs:
+            if path.endswith(f"/containers/id-{name}/json"):
+                status, health = specs[name]
+                return _inspect(name, status, health=health, restart_count=1)
+            if path.endswith(f"/containers/id-{name}/stats"):
+                return _stats()
+        raise AssertionError(path)
+
+    monkeypatch.setenv("CONTAINER_FETCH_WORKERS", "1")
+    sequential = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+    monkeypatch.setenv("CONTAINER_FETCH_WORKERS", "8")
+    concurrent = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    assert sequential["available"] is True
+    assert concurrent["available"] is True
+    # Contents AND order must match: concurrency must not reorder rows.
+    assert sequential["containers"] == concurrent["containers"]
+    assert [row["name"] for row in concurrent["containers"]] == [
+        "a",
+        "c",
+        "a2",
+        "b",
+        "d",
+    ]
+
+
+def test_stats_failure_soft_fails_and_stays_available(monkeypatch):
+    monkeypatch.setenv("CONTAINER_FETCH_WORKERS", "8")
+
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "id-bad",
+                    "Names": ["/bad"],
+                    "Image": "img:bad",
+                    "State": "running",
+                },
+                {
+                    "Id": "id-ok",
+                    "Names": ["/ok"],
+                    "Image": "img:ok",
+                    "State": "running",
+                },
+            ]
+        if path.endswith("/containers/id-bad/json"):
+            return _inspect("bad", "running", health="healthy", restart_count=2)
+        if path.endswith("/containers/id-bad/stats"):
+            raise RuntimeError("stats down")
+        if path.endswith("/containers/id-ok/json"):
+            return _inspect("ok", "running", health="healthy")
+        if path.endswith("/containers/id-ok/stats"):
+            return _stats()
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    assert result["available"] is True
+    assert result["reason"] is None
+    by_name = {row["name"]: row for row in result["containers"]}
+    bad = by_name["bad"]
+    assert bad["health"] == "healthy"
+    assert bad["restart_count"] == 2
+    assert bad["cpu_percent"] is None
+    assert bad["memory_used_bytes"] is None
+    assert bad["memory_limit_bytes"] is None
+    assert by_name["ok"]["cpu_percent"] == 100.0
+    assert by_name["ok"]["memory_used_bytes"] == 10
+
+
+def test_worker_exception_falls_back_to_list_only_row(monkeypatch):
+    import app.collectors.docker as docker_mod
+
+    monkeypatch.setenv("CONTAINER_FETCH_WORKERS", "4")
+
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {"Id": "id-a", "Names": ["/a"], "Image": "img:a", "State": "running"},
+                {"Id": "id-b", "Names": ["/b"], "Image": "img:b", "State": "running"},
+            ]
+        raise AssertionError(path)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("worker blew up")
+
+    monkeypatch.setattr(docker_mod, "_one_container", boom)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    assert result["available"] is True
+    assert result["reason"] is None
+    by_name = {row["name"]: row for row in result["containers"]}
+    assert set(by_name) == {"a", "b"}
+    for row in by_name.values():
+        assert row["cpu_percent"] is None
+        assert row["memory_used_bytes"] is None
+        assert row["memory_limit_bytes"] is None
+        assert row["uptime_seconds"] is None
+        assert row["restart_count"] == 0
+
+
+def test_concurrent_fetches_respect_worker_bound(monkeypatch):
+    monkeypatch.setenv("CONTAINER_FETCH_WORKERS", "3")
+    names = [f"c{i}" for i in range(9)]
+    lock = threading.Lock()
+    state = {"inflight": 0, "peak": 0}
+
+    class TrackingClient:
+        def get_json(self, path, params=None):
+            with lock:
+                state["inflight"] += 1
+                state["peak"] = max(state["peak"], state["inflight"])
+            try:
+                time.sleep(0.02)
+                if path.endswith("/containers/json"):
+                    return [
+                        {
+                            "Id": f"id-{name}",
+                            "Names": ["/" + name],
+                            "Image": "img:1",
+                            "State": "running",
+                        }
+                        for name in names
+                    ]
+                if path.endswith("/json"):
+                    return _inspect("x", "running")
+                if path.endswith("/stats"):
+                    return _stats()
+                raise AssertionError(path)
+            finally:
+                with lock:
+                    state["inflight"] -= 1
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=TrackingClient(),
+        now=NOW,
+    )
+
+    assert result["available"] is True
+    assert len(result["containers"]) == len(names)
+    # Never exceeds the configured bound, and did run concurrently.
+    assert state["peak"] <= 3
+    assert state["peak"] >= 2
+
+
+def test_worker_count_coerced_to_minimum_one(monkeypatch):
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {"Id": "id-a", "Names": ["/a"], "Image": "img:a", "State": "exited"}
+            ]
+        raise AssertionError(path)
+
+    for raw in ("0", "-4", "not-a-number", ""):
+        monkeypatch.setenv("CONTAINER_FETCH_WORKERS", raw)
+        result = collect_containers(
+            socket_path="/injected.sock",
+            client=FakeClient(handler),
+            now=NOW,
+        )
+        assert result["available"] is True
+        assert [row["name"] for row in result["containers"]] == ["a"]
