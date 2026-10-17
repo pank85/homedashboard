@@ -64,7 +64,9 @@ deploy:
   before_script:
     - apk add --no-cache openssh-client
     - mkdir -p ~/.ssh
-    - printf '%s' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    # The trailing newline is mandatory: OpenSSH rejects a PEM key that does not end in
+    # one with "Load key ... error in libcrypto: unsupported".
+    - printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H 172.16.0.50 >> ~/.ssh/known_hosts 2>/dev/null
   script:
