@@ -1,3 +1,5 @@
+import re
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -259,6 +261,37 @@ _EMBED_LIMIT = (
 )
 
 
+def _panel(html: str, panel_id: str) -> str:
+    marker = f'id="{panel_id}"'
+    start = html.index(marker)
+    open_at = html.rfind("<section", 0, start)
+    close_at = html.find("</section>", start)
+    assert open_at != -1 and close_at != -1
+    return html[open_at:close_at]
+
+
+def _tag(html: str, element_id: str) -> str:
+    match = re.search(rf'<[^>]*id="{element_id}"[^>]*>', html)
+    assert match is not None, element_id
+    return match.group(0)
+
+
+def _js_function(source: str, name: str) -> str:
+    marker = "function " + name
+    start = source.index(marker)
+    brace = source.index("{", start)
+    depth = 0
+    for index in range(brace, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : index + 1]
+    raise AssertionError("unclosed " + name)
+
+
 def _unavailable_collectors() -> dict:
     def containers(**kwargs):
         return {
@@ -317,6 +350,8 @@ def _unavailable_collectors() -> dict:
 
 def test_page_renders_with_every_source_unavailable(monkeypatch):
     monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
     application = create_app(collectors=_unavailable_collectors())
     with TestClient(application) as client:
         page = client.get("/")
@@ -347,6 +382,36 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert 'id="agents-body"' in page.text
         assert 'id="panel-host"' in page.text
         assert 'id="host-body"' in page.text
+        assert 'id="panel-sessions"' in page.text
+        assert 'id="sessions-body"' in page.text
+        assert 'id="herdr-block"' in page.text
+        assert 'id="container-filter-text"' in page.text
+        assert 'id="container-filter-state"' in page.text
+        assert 'id="container-filter-hide-healthy"' in page.text
+        assert 'id="container-filter-count"' in page.text
+        assert 'id="new-session-form"' in page.text
+        assert 'src="/static/container_filters.js"' in page.text
+        assert page.text.index('src="/static/container_filters.js"') < page.text.index('src="/static/app.js"')
+        assert (
+            "Archive only updates this dashboard. It does not stop or delete the herdr workspace, tab, or agent."
+            in page.text
+        )
+        warning = "herdr --session &lt;name&gt; attach is not a working command on herdr 0.9.5."
+        assert warning in page.text
+        assert page.text.replace(warning, "").count("herdr --session") == 0
+        assert "undefined" not in page.text
+        assert "CHAT_API_TOKEN unset" in page.text
+        password = _tag(page.text, "session-token")
+        assert 'type="password"' in password
+        assert "value=" not in password
+        for panel_id in ("panel-containers", "panel-agents", "panel-host", "panel-sessions"):
+            assert "unavailable" in _panel(page.text, panel_id)
+        for control in ("session-kind", "session-cwd", "session-label", "session-token", "session-submit"):
+            assert "disabled" in _tag(page.text, control)
+        agents_panel = _panel(page.text, "panel-agents")
+        assert agents_panel.index('id="herdr-block"') < agents_panel.index('id="agents-body"')
+        containers_panel = _panel(page.text, "panel-containers")
+        assert containers_panel.index('id="container-filter-text"') < containers_panel.index('id="containers-body"')
         assert 'id="herdr-embed"' not in page.text
         assert "sandbox" not in page.text
 
@@ -384,6 +449,16 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert "https://" not in style.text
         assert "http://" not in style.text
         assert "innerHTML" not in script.text
+        assert "filterContainers(" in script.text
+        assert "homedashboard.chatApiToken" in script.text
+        assert "/api/sessions" in script.text
+        assert "clipboard.writeText" in script.text
+        filters = client.get("/static/container_filters.js")
+        assert filters.status_code == 200
+        assert "fetch(" not in filters.text
+        assert "https://" not in filters.text
+        assert "http://" not in filters.text
+        assert "innerHTML" not in filters.text
         assert "@import" not in style.text
         assert "url(http" not in style.text
         assert "#0f1419" in style.text
@@ -393,6 +468,9 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert "#e6b35a" in style.text
         assert "#f07178" in style.text
         assert "max-width: 640px" in style.text
+        assert "grid-template-columns: 1fr" in style.text
+        assert "repeat(auto-fill, minmax(16rem, 1fr))" in style.text
+        assert "min-width: 641px" in style.text
 
     calls: list[str] = []
 
@@ -468,3 +546,395 @@ def test_page_real_collectors_missing_sources(monkeypatch, tmp_path):
     assert "super-secret-token" not in page.text
     assert 'data-refresh="0"' in page.text
     assert 'id="herdr-embed"' not in page.text
+
+
+def _collectors(containers: dict, agents: dict | None = None) -> dict:
+    quiet = _unavailable_collectors()
+
+    def collect_containers(**kwargs):
+        return containers
+
+    def collect_agents(**kwargs):
+        if agents is None:
+            return quiet["agents"](**kwargs)
+        return agents
+
+    return {
+        "containers": collect_containers,
+        "agents": collect_agents,
+        "host": quiet["host"],
+    }
+
+
+def _container_row(**overrides) -> dict:
+    row = {
+        "name": "web-1",
+        "compose_service": "web",
+        "id_short": "abc123",
+        "image": "ghcr.io/example/web:latest",
+        "state": "running",
+        "health": "healthy",
+        "uptime_seconds": 120,
+        "restart_count": 2,
+        "cpu_percent": 12.5,
+        "memory_used_bytes": 512,
+        "memory_limit_bytes": 1024,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_container_cards_badges_and_herdr_groups(monkeypatch):
+    monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    containers = {
+        "available": True,
+        "reason": None,
+        "refreshed_at": "2020-01-01T00:00:00+00:00",
+        "containers": [
+            _container_row(),
+            _container_row(
+                name="old-1",
+                compose_service="",
+                id_short="def456",
+                image=None,
+                state="exited",
+                health=None,
+                uptime_seconds=None,
+                restart_count=None,
+                cpu_percent=None,
+                memory_used_bytes=None,
+                memory_limit_bytes=None,
+            ),
+        ],
+    }
+    agents = {
+        "available": True,
+        "reason": None,
+        "note": "",
+        "refreshed_at": "2020-01-01T00:00:00+00:00",
+        "sources": [
+            {
+                "name": "herdr",
+                "used": False,
+                "refreshed_at": "2020-01-01T00:00:00+00:00",
+                "error": "herdr config not mounted",
+            },
+            {
+                "name": "proc",
+                "used": True,
+                "refreshed_at": "2020-01-01T00:00:00+00:00",
+                "error": None,
+            },
+        ],
+        "herdr": {
+            "reachable": False,
+            "version": None,
+            "session": None,
+            "refused": False,
+            "reason": "herdr config not mounted",
+            "workspace_count": 1,
+            "tab_count": 1,
+            "agent_count": 2,
+            "command": "",
+        },
+        "agents": [
+            {
+                "source": "herdr",
+                "kind": "pi",
+                "workspace_label": "lab",
+                "tab_label": "tab-a",
+                "status": "working",
+                "cwd": "/work",
+                "elapsed_seconds": 90,
+                "elapsed_source": "herdr",
+            },
+            {
+                "source": "proc",
+                "kind": "claude",
+                "workspace_label": "",
+                "tab_label": "",
+                "status": "running",
+                "cwd": "/tmp",
+                "elapsed_seconds": 5,
+                "elapsed_source": "proc",
+            },
+            {
+                "source": "herdr",
+                "kind": "codex",
+                "workspace_label": "",
+                "tab_label": "tab-b",
+                "status": "idle",
+                "cwd": "/other",
+                "elapsed_seconds": None,
+                "elapsed_source": "herdr",
+            },
+        ],
+    }
+    application = create_app(collectors=_collectors(containers, agents))
+    with TestClient(application) as client:
+        page = client.get("/")
+    assert page.status_code == 200
+    assert "Traceback" not in page.text
+    assert "super-secret-token" not in page.text
+    assert "undefined" not in page.text
+    assert "None" not in page.text
+    panel = _panel(page.text, "panel-containers")
+    assert panel.count("<article") == 2
+    assert "container-grid" in panel
+    assert ">web</h3>" in panel
+    assert ">old-1</h3>" in panel
+    assert "abc123" in panel
+    assert "def456" in panel
+    assert "web:latest" in panel
+    assert ">running</span>" in panel
+    assert ">healthy</span>" in panel
+    assert ">exited</span>" in panel
+    assert ">none</span>" in panel
+    assert "unknown" in panel
+    assert 'style="width: 12.5%"' in panel
+    assert 'style="width: 50.0%"' in panel
+    agents_panel = _panel(page.text, "panel-agents")
+    assert "herdr config not mounted" in agents_panel
+    assert "unavailable: herdr config not mounted" in agents_panel
+    assert "<h3>lab</h3>" in agents_panel
+    assert "<h3>proc</h3>" in agents_panel
+    assert "<h3>unknown</h3>" in agents_panel
+    assert "kind pi" in agents_panel
+    assert "tab tab-a" in agents_panel
+    assert "status working" in agents_panel
+    assert "cwd /work" in agents_panel
+    assert "elapsed 1m 30s" in agents_panel
+    assert "kind claude" in agents_panel
+    assert "elapsed unknown" in agents_panel
+    assert "5s" not in agents_panel
+    assert "source herdr" in agents_panel
+    assert "source proc" in agents_panel
+
+
+def test_container_empty_and_single_card(monkeypatch):
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    empty = {
+        "available": True,
+        "reason": None,
+        "refreshed_at": "2020-01-01T00:00:00+00:00",
+        "containers": [],
+    }
+    application = create_app(collectors=_collectors(empty))
+    with TestClient(application) as client:
+        page = client.get("/")
+    panel = _panel(page.text, "panel-containers")
+    assert "No containers." in panel
+    assert panel.count("<article") == 0
+
+    one = {
+        "available": True,
+        "reason": None,
+        "refreshed_at": "2020-01-01T00:00:00+00:00",
+        "containers": [_container_row(name="only", compose_service="")],
+    }
+    application = create_app(collectors=_collectors(one))
+    with TestClient(application) as client:
+        page = client.get("/")
+    panel = _panel(page.text, "panel-containers")
+    assert panel.count("<article") == 1
+    assert ">only</h3>" in panel
+
+
+def _insert_session(path: str) -> None:
+    conn = sqlite3.connect(path)
+    conn.execute(
+        """
+        INSERT INTO chat_sessions (
+            id, label, agent_kind, herdr_session, workspace_id, cwd, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "a" * 32,
+            "demo",
+            "pi",
+            "hermes",
+            "ws-1",
+            "/work",
+            "running",
+            "2020-01-01T00:00:00+00:00",
+            "2020-01-01T00:00:00+00:00",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_sessions_form_disabled_without_token(monkeypatch, tmp_path):
+    db_path = tmp_path / "dash.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
+    application = create_app(collectors=_unavailable_collectors())
+    _insert_session(str(db_path))
+    with TestClient(application) as client:
+        page = client.get("/")
+    assert page.status_code == 200
+    assert "CHAT_API_TOKEN unset" in page.text
+    assert "super-secret-token" not in page.text
+    for control in ("session-kind", "session-cwd", "session-label", "session-token", "session-submit"):
+        assert "disabled" in _tag(page.text, control)
+    password = _tag(page.text, "session-token")
+    assert 'type="password"' in password
+    assert "value=" not in password
+    archive = re.search(r'<button[^>]*class="archive-session"[^>]*>', page.text)
+    assert archive is not None
+    assert "disabled" in archive.group(0)
+    assert "herdr session attach hermes" in page.text
+
+
+def test_sessions_list_and_enabled_form(monkeypatch, tmp_path):
+    db_path = tmp_path / "dash.db"
+    monkeypatch.setenv("DB_PATH", str(db_path))
+    monkeypatch.setenv("CHAT_API_TOKEN", "session-secret")
+    monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
+    application = create_app(collectors=_unavailable_collectors())
+    _insert_session(str(db_path))
+    with TestClient(application) as client:
+        page = client.get("/")
+    assert page.status_code == 200
+    assert "session-secret" not in page.text
+    assert "super-secret-token" not in page.text
+    assert "undefined" not in page.text
+    panel = _panel(page.text, "panel-sessions")
+    assert "label demo" in panel
+    assert "kind pi" in panel
+    assert "workspace ws-1" in panel
+    assert "status running" in panel
+    assert "cwd /work" in panel
+    assert "ago" in panel
+    assert "herdr session attach hermes" in panel
+    assert "Open Herdr Web" in panel
+    assert 'href="/herdr/"' in panel
+    submit = _tag(page.text, "session-submit")
+    assert "disabled" not in submit
+    password = _tag(page.text, "session-token")
+    assert "value=" not in password
+    archive = re.search(r'<button[^>]*class="archive-session"[^>]*>', page.text)
+    assert archive is not None
+    assert "disabled" not in archive.group(0)
+    from app.sessions_policy import AGENT_START_KINDS
+
+    for kind in AGENT_START_KINDS:
+        assert f'value="{kind}"' in panel
+
+
+def test_tick_render_path_reapplies_filters():
+    source = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    tick = _js_function(source, "tick")
+    assert "renderContainers(" in tick
+    render = _js_function(source, "renderContainers")
+    assert "filterContainers(" in render
+    assert "container-filter-text" in render
+    assert "container-filter-state" in render
+    assert "container-filter-hide-healthy" in render
+    assert ".value =" not in tick
+    filters = (ROOT / "app/static/container_filters.js").read_text(encoding="utf-8")
+    assert "function filterContainers" in filters
+    assert "function filterCount" in filters
+    assert "fetch(" not in filters
+    assert "http://" not in filters
+    assert "https://" not in filters
+    assert "innerHTML" not in source
+    assert "http://" not in source
+    assert "https://" not in source
+    create = _js_function(source, "onCreate")
+    assert "chatToken()" in create
+    assert create.index("if (typed)") < create.index(
+        'localStorage.setItem("homedashboard.chatApiToken", typed)'
+    )
+    assert 'setItem("homedashboard.chatApiToken", token)' not in create
+    assert 'setItem("homedashboard.chatApiToken", "")' not in create
+    assert "token=" not in create
+    refresh = source.index('var raw = body.getAttribute("data-refresh")')
+    assert source.index("tick();", refresh) < source.index('raw === "0"', refresh)
+    assert source.index("tick();", refresh) < source.index("setInterval(tick", refresh)
+
+
+_EMBED_PROXY = (
+    "The proxied /herdr/ path strips upstream X-Frame-Options and "
+    "Content-Security-Policy so the dashboard iframe and path shim can run. "
+    "Service workers are not supported through the proxy. A direct external "
+    "embed can still be blank."
+)
+
+
+def test_embed_iframe_survives_agents_herdr_without_embed(monkeypatch):
+    monkeypatch.setenv("HERDR_WEB_EMBED", "true")
+    monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    agent_herdr = {
+        "reachable": False,
+        "version": "0.9.5",
+        "session": "ops",
+        "refused": False,
+        "reason": "agents block only",
+        "workspace_count": 4,
+        "tab_count": 5,
+        "agent_count": 6,
+        "command": "",
+    }
+    assert "embed" not in agent_herdr
+    assert "embed_src" not in agent_herdr
+    agents = {
+        "available": True,
+        "reason": None,
+        "note": "",
+        "refreshed_at": "2020-01-01T00:00:00+00:00",
+        "sources": [],
+        "herdr": agent_herdr,
+        "agents": [],
+    }
+    containers = {
+        "available": False,
+        "reason": "docker socket not reachable: /var/run/docker.sock",
+        "refreshed_at": "2020-01-01T00:00:00+00:00",
+        "containers": [],
+    }
+    application = create_app(collectors=_collectors(containers, agents))
+    with TestClient(application) as client:
+        page = client.get("/")
+        metrics = client.get("/api/metrics")
+    assert page.status_code == 200
+    assert metrics.status_code == 200
+    body = metrics.json()
+    assert body["herdr"]["embed"] is True
+    assert body["herdr"]["embed_src"] == "/herdr/"
+    assert "embed" not in body["agents"]["herdr"]
+    assert "embed_src" not in body["agents"]["herdr"]
+    assert body["agents"]["herdr"]["session"] == "ops"
+    assert "super-secret-token" not in page.text
+    assert "super-secret-token" not in metrics.text
+    assert "Traceback" not in page.text
+    iframe = _tag(page.text, "herdr-embed")
+    assert 'src="/herdr/"' in iframe
+    assert "sandbox" not in iframe
+    frame = _panel(page.text, "herdr-frame")
+    assert 'id="herdr-embed"' in frame
+    assert _EMBED_LIMIT in frame
+    assert _EMBED_PROXY in frame
+    agents_panel = _panel(page.text, "panel-agents")
+    assert 'id="herdr-embed"' not in agents_panel
+    assert "session ops" in agents_panel
+    assert "version 0.9.5" in agents_panel
+    assert "workspaces 4" in agents_panel
+    assert "tabs 5" in agents_panel
+    assert "agents 6" in agents_panel
+    assert "agents block only" in agents_panel
+    assert 'href="/herdr/"' in page.text
+    template = (ROOT / "app/templates/index.html").read_text(encoding="utf-8")
+    agents_src = _panel(template, "panel-agents")
+    assert "{% set agent_herdr" in agents_src
+    assert "{% set herdr" not in template
+    assert "{{ herdr." not in agents_src
+    frame_src = _panel(template, "herdr-frame")
+    assert "{% if herdr.embed %}" in frame_src
+    assert "herdr.embed_src" in frame_src

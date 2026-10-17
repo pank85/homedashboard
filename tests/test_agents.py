@@ -1,15 +1,21 @@
 import json
+import shlex
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.collectors.agents import (
     collect_agents,
+    elapsed_from_herdr,
     normalize_status,
     parse_herdr_agent_list,
     parse_herdr_snapshot,
+    parse_herdr_tab_list,
     parse_herdr_workspace_list,
     process_cpu_percent,
 )
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "herdr"
 
 AGENT_LIST = """
 {"id":"cli:agent:list","result":{"type":"agent_list","agents":[{"agent":"claude","agent_session":{"agent":"claude","kind":"session","source":"file","value":"sess-1"},"agent_status":"working","cwd":"/work","foreground_cwd":"/work/sub","pane_id":"p1","tab_id":"t1","terminal_title":"Claude","terminal_title_stripped":"Claude","workspace_id":"ws1"}]}}
@@ -161,8 +167,13 @@ def test_parse_contract_fixtures_join_workspace_label():
     row = payload["agents"][0]
     assert set(row) == {
         "source",
+        "workspace_id",
         "workspace_label",
         "label",
+        "tab_id",
+        "tab_label",
+        "pane_id",
+        "kind",
         "status",
         "cwd",
         "session",
@@ -170,14 +181,41 @@ def test_parse_contract_fixtures_join_workspace_label():
         "rss_bytes",
         "cpu_percent",
         "elapsed_seconds",
+        "elapsed_source",
     }
     assert row["source"] == "herdr"
+    assert row["workspace_id"] == "ws1"
     assert row["workspace_label"] == "demo"
     assert row["label"] == "Claude"
+    assert row["tab_id"] == "t1"
+    assert row["tab_label"] == ""
+    assert row["pane_id"] == "p1"
+    assert row["kind"] == "claude"
     assert row["status"] == "working"
     assert row["cwd"] == "/work"
     assert row["session"] == "sess-1"
     assert row["pid"] is None
+    assert row["elapsed_seconds"] is None
+    assert row["elapsed_source"] == "unknown"
+    assert payload["herdr"] == {
+        "reachable": True,
+        "version": None,
+        "session": "",
+        "refused": False,
+        "reason": None,
+        "workspace_count": 1,
+        "tab_count": 0,
+        "agent_count": 1,
+        "command": None,
+    }
+    assert payload["workspaces"][0] == {
+        "workspace_id": "ws1",
+        "label": "demo",
+        "agent_status": "working",
+        "tab_count": 1,
+        "pane_count": 1,
+    }
+    assert calls == [["herdr", "workspace", "list"], ["herdr", "agent", "list"]]
     assert ("api", "snapshot") not in [tuple(call[1:]) for call in calls]
 
 
@@ -520,3 +558,448 @@ def test_matching_descendant_is_not_a_separate_row(tmp_path: Path):
     )
     assert [row["pid"] for row in payload["agents"]] == [20]
     assert payload["agents"][0]["rss_bytes"] == (2 + 3 + 4) * 100
+
+
+_FORBIDDEN = frozenset({"create", "start", "close", "stop", "delete", "prompt", "send-keys"})
+_ROW_KEYS = {
+    "source",
+    "workspace_id",
+    "workspace_label",
+    "label",
+    "tab_id",
+    "tab_label",
+    "pane_id",
+    "kind",
+    "status",
+    "cwd",
+    "session",
+    "pid",
+    "rss_bytes",
+    "cpu_percent",
+    "elapsed_seconds",
+    "elapsed_source",
+}
+
+
+def _fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def _quote(argv: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in argv)
+
+
+def _session_runner(responses: dict[tuple[str, ...], object], calls: list[list[str]]):
+    def run(argv, timeout):
+        assert isinstance(argv, list)
+        calls.append(list(argv))
+        assert timeout == 3.0
+        assert _FORBIDDEN.isdisjoint(argv)
+        assert not any(isinstance(part, str) and part == _quote(argv) and len(argv) != 1 for part in argv)
+        value = responses[tuple(argv)]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    return run
+
+
+def _idle_proc(tmp_path: Path) -> dict:
+    return {
+        "proc_root": str(tmp_path),
+        "sleep": lambda _seconds: None,
+        "page_size": 4096,
+        "clock_ticks": 100,
+    }
+
+
+def test_fixture_agent_list_ignores_state_change_seq():
+    raw = json.loads(_fixture("agent-list.json"))
+    agent = raw["result"]["agents"][0]
+    assert "state_change_seq" in agent
+    assert "elapsed_ms" not in agent
+    assert "state_since" not in agent
+    assert "status_since" not in agent
+    assert "state_changed_at" not in agent
+    parsed = parse_herdr_agent_list(_fixture("agent-list.json"))[0]
+    assert parsed["elapsed_seconds"] is None
+    assert parsed["elapsed_source"] == "unknown"
+    assert parsed["kind"] == "claude"
+    assert parsed["tab_id"] == "w2:t1"
+    assert parsed["pane_id"] == "w2:p1"
+    tabs = parse_herdr_tab_list(_fixture("tab-list.json"))
+    assert tabs[0]["tab_id"] == "w2:t1"
+    assert tabs[0]["label"] == "agents"
+    created = json.loads(_fixture("workspace-created.json"))
+    assert created["result"]["type"] == "workspace_created"
+    assert created["result"]["workspace"]["workspace_id"] == "wsynth"
+    assert created["result"]["tab"]["tab_id"] == "wsynth:t1"
+    assert created["result"]["root_pane"]["pane_id"] == "wsynth:p1"
+    assert "wC" not in _fixture("workspace-created.json")
+
+
+def test_elapsed_from_herdr_duration_and_timestamps():
+    now = datetime(2026, 10, 17, 12, 0, tzinfo=timezone.utc)
+    assert elapsed_from_herdr({"elapsed_ms": 1500}, now) == (1, "herdr")
+    assert elapsed_from_herdr({"state_duration_ms": 90000}, now) == (90, "herdr")
+    assert elapsed_from_herdr({"duration_ms": 0}, now) == (0, "herdr")
+    assert elapsed_from_herdr({"elapsed_ms": -1}, now) == (None, "unknown")
+    assert elapsed_from_herdr({"elapsed_ms": True}, now) == (None, "unknown")
+    assert elapsed_from_herdr({"state_change_seq": 1_700_000_000}, now) == (None, "unknown")
+    assert elapsed_from_herdr({"state_since": 42}, now) == (None, "unknown")
+    assert elapsed_from_herdr(
+        {"status_since": 1_700_000_000},
+        datetime.fromtimestamp(1_600_000_000, tz=timezone.utc),
+    ) == (None, "unknown")
+    assert elapsed_from_herdr(
+        {"state_changed_at": 1_700_000_000},
+        datetime.fromtimestamp(1_700_000_042, tz=timezone.utc),
+    ) == (42, "herdr")
+    assert elapsed_from_herdr({"state_since": "2026-10-17T11:59:18Z"}, now) == (42, "herdr")
+    assert elapsed_from_herdr(
+        {"elapsed_ms": 2000, "state_since": "2026-10-17T11:00:00Z"},
+        now,
+    ) == (2, "herdr")
+    assert elapsed_from_herdr({"status_since": "2026-10-17T12:00:01+00:00"}, now) == (
+        None,
+        "unknown",
+    )
+
+
+def test_session_none_keeps_legacy_argv(tmp_path: Path):
+    calls: list[list[str]] = []
+    payload = collect_agents(
+        herdr_session=None,
+        herdr_config_dir=str(tmp_path),
+        runner=_session_runner(
+            {
+                ("herdr", "workspace", "list"): Result(WORKSPACE_LIST),
+                ("herdr", "agent", "list"): Result(AGENT_LIST),
+            },
+            calls,
+        ),
+        **_idle_proc(tmp_path),
+    )
+    assert calls == [["herdr", "workspace", "list"], ["herdr", "agent", "list"]]
+    assert payload["herdr"]["session"] == ""
+    assert payload["herdr"]["version"] is None
+    assert payload["herdr"]["tab_count"] == 0
+    assert payload["herdr"]["reachable"] is True
+    assert payload["reason"] is None
+
+
+def test_named_session_lists_tabs_and_version(tmp_path: Path):
+    calls: list[list[str]] = []
+    workspace = json.dumps(
+        {
+            "id": "cli:workspace:list",
+            "result": {
+                "type": "workspace_list",
+                "workspaces": [
+                    {
+                        "workspace_id": "w2",
+                        "label": "demo",
+                        "agent_status": "working",
+                        "tab_count": 1,
+                        "pane_count": 1,
+                    }
+                ],
+            },
+        }
+    )
+    payload = collect_agents(
+        herdr_session="  hermes  ",
+        runner=_session_runner(
+            {
+                ("herdr", "--session", "hermes", "workspace", "list"): Result(workspace),
+                ("herdr", "--session", "hermes", "tab", "list"): Result(_fixture("tab-list.json")),
+                ("herdr", "--session", "hermes", "agent", "list"): Result(
+                    _fixture("agent-list.json")
+                ),
+                ("herdr", "--version"): Result("herdr 0.9.5\nextra\n"),
+            },
+            calls,
+        ),
+        **_idle_proc(tmp_path),
+    )
+    assert calls == [
+        ["herdr", "--session", "hermes", "workspace", "list"],
+        ["herdr", "--session", "hermes", "tab", "list"],
+        ["herdr", "--session", "hermes", "agent", "list"],
+        ["herdr", "--version"],
+    ]
+    assert all("--session" not in call or call[1] == "--session" for call in calls)
+    assert calls[-1] == ["herdr", "--version"]
+    row = payload["agents"][0]
+    assert set(row) == _ROW_KEYS
+    assert row["workspace_id"] == "w2"
+    assert row["workspace_label"] == "demo"
+    assert row["tab_id"] == "w2:t1"
+    assert row["tab_label"] == "agents"
+    assert row["pane_id"] == "w2:p1"
+    assert row["kind"] == "claude"
+    assert row["elapsed_seconds"] is None
+    assert row["elapsed_source"] == "unknown"
+    assert payload["herdr"] == {
+        "reachable": True,
+        "version": "herdr 0.9.5",
+        "session": "hermes",
+        "refused": False,
+        "reason": None,
+        "workspace_count": 1,
+        "tab_count": 1,
+        "agent_count": 1,
+        "command": None,
+    }
+    assert payload["reason"] is None
+
+
+def test_named_session_snapshots_only_when_agents_empty(tmp_path: Path):
+    calls: list[list[str]] = []
+    payload = collect_agents(
+        herdr_session="hermes",
+        runner=_session_runner(
+            {
+                ("herdr", "--session", "hermes", "workspace", "list"): Result(WORKSPACE_LIST),
+                ("herdr", "--session", "hermes", "tab", "list"): Result(_fixture("tab-list.json")),
+                ("herdr", "--session", "hermes", "agent", "list"): Result(
+                    _fixture("agent-list-empty.json")
+                ),
+                ("herdr", "--session", "hermes", "api", "snapshot"): Result(SNAPSHOT),
+                ("herdr", "--version"): Result("herdr 0.9.5\n"),
+            },
+            calls,
+        ),
+        **_idle_proc(tmp_path),
+    )
+    assert calls[-2] == ["herdr", "--session", "hermes", "api", "snapshot"]
+    assert calls[-1] == ["herdr", "--version"]
+    assert payload["herdr"]["reachable"] is True
+    assert payload["herdr"]["agent_count"] == 1
+    assert payload["agents"][0]["kind"] == "codex"
+
+
+def test_version_failure_does_not_clear_list(tmp_path: Path):
+    calls: list[list[str]] = []
+    payload = collect_agents(
+        herdr_session="hermes",
+        runner=_session_runner(
+            {
+                ("herdr", "--session", "hermes", "workspace", "list"): Result(WORKSPACE_LIST),
+                ("herdr", "--session", "hermes", "tab", "list"): Result(_fixture("tab-list.json")),
+                ("herdr", "--session", "hermes", "agent", "list"): Result(
+                    _fixture("agent-list.json")
+                ),
+                ("herdr", "--version"): Result("", returncode=1, stderr="no version"),
+            },
+            calls,
+        ),
+        **_idle_proc(tmp_path),
+    )
+    assert payload["agents"]
+    assert payload["herdr"]["reachable"] is True
+    assert payload["herdr"]["version"] is None
+    assert payload["herdr"]["reason"] is None
+    assert payload["herdr"]["command"] is None
+    assert payload["sources"][0]["error"] is None
+    assert calls[-1] == ["herdr", "--version"]
+
+
+def test_default_session_does_not_spawn(tmp_path: Path):
+    for name in ("default", "Default", " Default "):
+        calls: list[list[str]] = []
+
+        def run(argv, timeout, calls=calls):
+            calls.append(list(argv))
+            raise AssertionError("spawned")
+
+        payload = collect_agents(
+            herdr_session=name,
+            runner=run,
+            **_idle_proc(tmp_path),
+        )
+        assert calls == []
+        assert payload["herdr"]["reason"] == "refusing session default"
+        assert payload["herdr"]["refused"] is True
+        assert payload["herdr"]["command"] is None
+        assert payload["herdr"]["reachable"] is False
+        assert payload["herdr"]["session"] == name.strip()
+        assert payload["sources"][0]["error"] == "refusing session default"
+        assert payload["sources"][0]["used"] is False
+        assert payload["reason"] is None
+
+
+def test_invalid_session_does_not_spawn(tmp_path: Path):
+    for name in ("", "hermes;rm", "-hermes", "has space", "a" * 65, "hermes/ops"):
+        calls: list[list[str]] = []
+
+        def run(argv, timeout, calls=calls):
+            calls.append(list(argv))
+            raise AssertionError("spawned")
+
+        payload = collect_agents(
+            herdr_session=name,
+            runner=run,
+            **_idle_proc(tmp_path),
+        )
+        assert calls == []
+        assert payload["herdr"]["reason"] == "invalid HERDR_SESSION"
+        assert payload["herdr"]["refused"] is False
+        assert payload["herdr"]["command"] is None
+        assert payload["sources"][0]["error"] == "invalid HERDR_SESSION"
+
+
+def test_missing_config_does_not_spawn(tmp_path: Path):
+    calls: list[list[str]] = []
+
+    def run(argv, timeout):
+        calls.append(list(argv))
+        raise AssertionError("spawned")
+
+    missing = collect_agents(
+        herdr_session="hermes",
+        herdr_config_dir=str(tmp_path),
+        runner=run,
+        **_idle_proc(tmp_path),
+    )
+    assert calls == []
+    assert missing["herdr"]["reason"] == "herdr config not mounted"
+    assert missing["herdr"]["refused"] is False
+    assert missing["herdr"]["command"] is None
+    assert missing["sources"][0]["error"] == "herdr config not mounted"
+
+    (tmp_path / "config.toml").mkdir()
+    directory = collect_agents(
+        herdr_session="hermes",
+        herdr_config_dir=str(tmp_path),
+        runner=run,
+        **_idle_proc(tmp_path),
+    )
+    assert calls == []
+    assert directory["herdr"]["reason"] == "herdr config not mounted"
+
+
+def test_mounted_config_allows_session_commands(tmp_path: Path):
+    config = tmp_path / "config.toml"
+    config.write_text("socket_path = \"/tmp/herdr.sock\"\n", encoding="utf-8")
+    calls: list[list[str]] = []
+    payload = collect_agents(
+        herdr_session="hermes",
+        herdr_config_dir=str(tmp_path),
+        runner=_session_runner(
+            {
+                ("herdr", "--session", "hermes", "workspace", "list"): Result(WORKSPACE_LIST),
+                ("herdr", "--session", "hermes", "tab", "list"): Result(_fixture("tab-list.json")),
+                ("herdr", "--session", "hermes", "agent", "list"): Result(
+                    _fixture("agent-list.json")
+                ),
+                ("herdr", "--version"): Result("herdr 0.9.5\n"),
+            },
+            calls,
+        ),
+        **_idle_proc(tmp_path),
+    )
+    assert calls[0] == ["herdr", "--session", "hermes", "workspace", "list"]
+    assert payload["herdr"]["reachable"] is True
+    assert payload["herdr"]["reason"] is None
+
+
+def test_nonzero_and_timeout_quote_argv_and_stderr(tmp_path: Path):
+    def timeout_runner(argv, timeout):
+        raise subprocess.TimeoutExpired(argv, timeout, stderr="socket hung")
+
+    timed_out = collect_agents(
+        runner=timeout_runner,
+        **_idle_proc(tmp_path),
+    )
+    assert timed_out["sources"][0]["error"] == "herdr timed out"
+    assert timed_out["herdr"]["command"] == "herdr workspace list"
+    assert timed_out["herdr"]["reason"] == "herdr timed out: herdr workspace list: socket hung"
+
+    stderr = "e" * 600
+    exited = collect_agents(
+        runner=lambda argv, timeout: Result("", returncode=2, stderr=stderr),
+        **_idle_proc(tmp_path),
+    )
+    assert exited["sources"][0]["error"] == "herdr exited 2"
+    assert exited["herdr"]["command"] == "herdr workspace list"
+    assert exited["herdr"]["reason"] == ("herdr exited 2: herdr workspace list: " + stderr)[:500]
+    assert len(exited["herdr"]["reason"]) == 500
+
+    calls: list[list[str]] = []
+
+    def spaced(argv, timeout):
+        calls.append(list(argv))
+        return Result("", returncode=2, stderr="boom")
+
+    quoted = collect_agents(
+        herdr_bin="/opt/herdr bin",
+        runner=spaced,
+        **_idle_proc(tmp_path),
+    )
+    assert calls == [["/opt/herdr bin", "workspace", "list"]]
+    assert quoted["herdr"]["command"] == "'/opt/herdr bin' workspace list"
+    assert (
+        quoted["herdr"]["reason"]
+        == "herdr exited 2: '/opt/herdr bin' workspace list: boom"
+    )
+    assert quoted["sources"][0]["error"] == "herdr exited 2"
+
+
+def test_malformed_fixture_sets_command_without_executing_it(tmp_path: Path):
+    calls: list[list[str]] = []
+
+    def run(argv, timeout):
+        calls.append(list(argv))
+        return Result(_fixture("agent-list-error.txt"))
+
+    payload = collect_agents(runner=run, **_idle_proc(tmp_path))
+    assert payload["sources"][0]["error"] == "malformed JSON from herdr"
+    assert payload["herdr"]["reason"] == "malformed JSON from herdr"
+    assert payload["herdr"]["command"] == "herdr workspace list"
+    assert calls == [["herdr", "workspace", "list"]]
+    assert payload["herdr"]["command"] not in calls[0]
+
+
+def test_proc_rows_carry_elapsed_source(tmp_path: Path):
+    _write_cpu(tmp_path, 100)
+    _write_uptime(tmp_path, 1000.0)
+    _write_pid(tmp_path, 20, "claude", 1, rss=4, starttime=100)
+    payload = collect_agents(
+        runner=lambda argv, timeout: Result(_fixture("agent-list-error.txt")),
+        proc_root=str(tmp_path),
+        sleep=lambda _seconds: None,
+        page_size=4096,
+        clock_ticks=100,
+        cpu_sample_seconds=0,
+    )
+    row = payload["agents"][0]
+    assert set(row) == _ROW_KEYS
+    assert row["source"] == "proc"
+    assert row["workspace_id"] == ""
+    assert row["workspace_label"] == ""
+    assert row["tab_id"] == ""
+    assert row["tab_label"] == ""
+    assert row["pane_id"] == ""
+    assert row["kind"] == ""
+    assert row["elapsed_seconds"] == 999
+    assert row["elapsed_source"] == "proc"
+    assert payload["herdr"]["agent_count"] == 0
+
+
+def test_module_does_not_emit_mutating_commands():
+    source = Path("app/collectors/agents.py").read_text(encoding="utf-8")
+    assert "shell=True" not in source
+    assert "os.system" not in source
+    assert "sessions_policy" not in source
+    assert "app.formatting" not in source
+    for bad in (
+        '"workspace", "create"',
+        '"agent", "start"',
+        '"send-keys"',
+        '"prompt"',
+        '"close"',
+        '"stop"',
+        '"delete"',
+    ):
+        assert bad not in source

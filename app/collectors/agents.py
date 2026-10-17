@@ -1,21 +1,31 @@
 """Read-only herdr agent parser and /proc fallback.
 
-Herdr argv is limited to ``workspace list``, ``agent list``, and ``api snapshot``
-(the last only when the agent list parsed and was empty). Process names match
-patterns exactly: ``pi`` does not match ``python``. Descendant RSS rolls into
-the nearest matching ancestor; matching descendants are not separate rows.
+Without a session, herdr argv is limited to ``workspace list``, ``agent list``,
+and ``api snapshot`` (the last only when the agent list parsed and was empty).
+A configured session also runs ``tab list`` and a separate ``--version``. This
+module never emits workspace create, agent start, close, stop, delete, prompt,
+or send-keys. Process names match patterns exactly: ``pi`` does not match
+``python``. Descendant RSS rolls into the nearest matching ancestor; matching
+descendants are not separate rows.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import subprocess
 import time
 from datetime import datetime, timezone
 from typing import Callable
 
 _STATUSES = frozenset({"working", "idle", "blocked", "done"})
+_SESSION_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+_DURATION_MS_KEYS = ("elapsed_ms", "state_duration_ms", "duration_ms")
+_SINCE_KEYS = ("state_since", "status_since", "state_changed_at")
+_EPOCH_SECONDS_MIN = 1_000_000_000
+_REASON_LIMIT = 500
 _DEFAULT_PATTERNS = (
     "claude",
     "opencode",
@@ -35,6 +45,82 @@ def normalize_status(value: str | None) -> str:
     if status in _STATUSES:
         return status
     return "unknown"
+
+
+def _seconds_from_ms(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value < 0:
+        return None
+    return int(value // 1000)
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        if value <= _EPOCH_SECONDS_MIN:
+            return None
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        number = float(text)
+    except ValueError:
+        number = None
+    else:
+        if isinstance(number, bool) or number <= _EPOCH_SECONDS_MIN:
+            return None
+        return datetime.fromtimestamp(number, tz=timezone.utc)
+    iso = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _seconds_since(value: object, now: datetime) -> int | None:
+    stamp = _parse_timestamp(value)
+    if stamp is None:
+        return None
+    moment = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
+    delta = (moment - stamp).total_seconds()
+    if delta < 0:
+        return None
+    return int(delta)
+
+
+def elapsed_from_herdr(
+    item: dict,
+    now: datetime | None = None,
+) -> tuple[int | None, str]:
+    """Duration from herdr fields, never from ``state_change_seq``.
+
+    Millisecond fields are truncated to whole seconds. Epoch seconds must be
+    greater than 1_000_000_000. A future timestamp is unknown.
+    """
+    if not isinstance(item, dict):
+        return None, "unknown"
+    for key in _DURATION_MS_KEYS:
+        if key not in item or item[key] is None:
+            continue
+        seconds = _seconds_from_ms(item[key])
+        if seconds is not None:
+            return seconds, "herdr"
+    moment = now if now is not None else datetime.now(timezone.utc)
+    for key in _SINCE_KEYS:
+        if key not in item or item[key] is None:
+            continue
+        seconds = _seconds_since(item[key], moment)
+        if seconds is not None:
+            return seconds, "herdr"
+    return None, "unknown"
 
 
 def _as_text(value: object) -> str:
@@ -62,10 +148,35 @@ def _session_of(raw: object) -> str:
     return ""
 
 
-def _agent_record(item: dict) -> dict:
-    workspace_id = item.get("workspace_id")
+def _kind_of(item: dict) -> str:
+    agent = _as_text(item.get("agent"))
+    if agent:
+        return agent
+    session = item.get("agent_session")
+    if isinstance(session, dict):
+        return _as_text(session.get("agent"))
+    return ""
+
+
+def _nonneg_int(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    if value < 0:
+        return 0
+    return value
+
+
+def _id_text(value: object) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _agent_record(item: dict, now: datetime | None = None) -> dict:
+    elapsed_seconds, elapsed_source = elapsed_from_herdr(item, now)
     return {
-        "workspace_id": workspace_id if isinstance(workspace_id, str) else "",
+        "workspace_id": _id_text(item.get("workspace_id")),
+        "tab_id": _id_text(item.get("tab_id")),
+        "pane_id": _id_text(item.get("pane_id")),
+        "kind": _kind_of(item),
         "label": _first_text(
             item,
             ("terminal_title_stripped", "terminal_title", "agent", "tab_id"),
@@ -74,6 +185,8 @@ def _agent_record(item: dict) -> dict:
         "status": normalize_status(item.get("agent_status")),
         "cwd": _first_text(item, ("cwd", "foreground_cwd")),
         "session": _session_of(item.get("agent_session")),
+        "elapsed_seconds": elapsed_seconds,
+        "elapsed_source": elapsed_source,
     }
 
 
@@ -88,10 +201,10 @@ def _object_list(payload: object, *keys: str) -> list:
     return current
 
 
-def parse_herdr_agent_list(stdout: str) -> list[dict]:
+def parse_herdr_agent_list(stdout: str, now: datetime | None = None) -> list[dict]:
     payload = json.loads(stdout)
     return [
-        _agent_record(item)
+        _agent_record(item, now)
         for item in _object_list(payload, "result", "agents")
         if isinstance(item, dict)
     ]
@@ -103,20 +216,40 @@ def parse_herdr_workspace_list(stdout: str) -> list[dict]:
     for item in _object_list(payload, "result", "workspaces"):
         if not isinstance(item, dict):
             continue
-        workspace_id = item.get("workspace_id")
         rows.append(
             {
-                "workspace_id": workspace_id if isinstance(workspace_id, str) else "",
+                "workspace_id": _id_text(item.get("workspace_id")),
                 "label": _as_text(item.get("label")),
+                "agent_status": normalize_status(item.get("agent_status")),
+                "tab_count": _nonneg_int(item.get("tab_count")),
+                "pane_count": _nonneg_int(item.get("pane_count")),
             }
         )
     return rows
 
 
-def parse_herdr_snapshot(stdout: str) -> list[dict]:
+def parse_herdr_tab_list(stdout: str) -> list[dict]:
+    payload = json.loads(stdout)
+    rows: list[dict] = []
+    for item in _object_list(payload, "result", "tabs"):
+        if not isinstance(item, dict):
+            continue
+        rows.append(
+            {
+                "tab_id": _id_text(item.get("tab_id")),
+                "workspace_id": _id_text(item.get("workspace_id")),
+                "label": _as_text(item.get("label")),
+                "agent_status": normalize_status(item.get("agent_status")),
+                "pane_count": _nonneg_int(item.get("pane_count")),
+            }
+        )
+    return rows
+
+
+def parse_herdr_snapshot(stdout: str, now: datetime | None = None) -> list[dict]:
     payload = json.loads(stdout)
     return [
-        _agent_record(item)
+        _agent_record(item, now)
         for item in _object_list(payload, "result", "snapshot", "agents")
         if isinstance(item, dict)
     ]
@@ -144,25 +277,106 @@ def _workspace_label(workspace_id: str, labels: dict[str, str]) -> str:
     return "unknown"
 
 
-def _herdr_row(record: dict, labels: dict[str, str]) -> dict:
+def _herdr_row(record: dict, labels: dict[str, str], tab_labels: dict[str, str]) -> dict:
+    workspace_id = record.get("workspace_id") or ""
+    tab_id = record.get("tab_id") or ""
+    elapsed_seconds = record.get("elapsed_seconds")
     return {
         "source": "herdr",
-        "workspace_label": _workspace_label(record.get("workspace_id") or "", labels),
+        "workspace_id": workspace_id,
+        "workspace_label": _workspace_label(workspace_id, labels),
         "label": record["label"],
+        "tab_id": tab_id,
+        "tab_label": tab_labels.get(tab_id, "") if tab_id else "",
+        "pane_id": record.get("pane_id") or "",
+        "kind": record.get("kind") or "",
         "status": record["status"],
         "cwd": record["cwd"],
         "session": record["session"],
         "pid": None,
         "rss_bytes": None,
         "cpu_percent": None,
-        "elapsed_seconds": None,
+        "elapsed_seconds": elapsed_seconds,
+        "elapsed_source": record.get("elapsed_source") or "unknown",
     }
 
 
 class _HerdrFailure(Exception):
-    def __init__(self, message: str) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        argv: list[str] | None = None,
+        stderr: str = "",
+        enrich: bool = False,
+    ) -> None:
         super().__init__(message)
         self.message = message
+        self.argv = argv
+        self.stderr = stderr
+        self.enrich = enrich
+
+
+class _HerdrOutcome:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+        self.workspaces: list[dict] = []
+        self.error: str | None = None
+        self.reason: str | None = None
+        self.command: str | None = None
+        self.reachable = False
+        self.version: str | None = None
+        self.tab_count = 0
+        self.refused = False
+        self.session = ""
+
+
+def _quote_argv(argv: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in argv)
+
+
+def _stderr_text(value: object) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _block_reason(
+    message: str,
+    argv: list[str] | None,
+    stderr: str,
+    enrich: bool,
+) -> tuple[str, str | None]:
+    quoted = _quote_argv(argv) if argv else None
+    if enrich and quoted is not None:
+        return f"{message}: {quoted}: {stderr}"[:_REASON_LIMIT], quoted
+    return message, quoted
+
+
+def _herdr_block(outcome: _HerdrOutcome) -> dict:
+    return {
+        "reachable": outcome.reachable,
+        "version": outcome.version,
+        "session": outcome.session,
+        "refused": outcome.refused,
+        "reason": outcome.reason,
+        "workspace_count": len(outcome.workspaces),
+        "tab_count": outcome.tab_count,
+        "agent_count": len(outcome.rows),
+        "command": outcome.command,
+    }
+
+
+def _refuse(outcome: _HerdrOutcome, reason: str, *, refused: bool) -> _HerdrOutcome:
+    outcome.error = reason
+    outcome.reason = reason
+    outcome.command = None
+    outcome.reachable = False
+    outcome.refused = refused
+    outcome.rows = []
+    return outcome
 
 
 def _default_runner(argv: list[str], timeout: float):
@@ -179,47 +393,145 @@ def _run_herdr(runner: Callable, argv: list[str], timeout: float) -> str:
     try:
         result = runner(argv, timeout)
     except FileNotFoundError:
-        raise _HerdrFailure(f"herdr not found: {argv[0]}") from None
-    except subprocess.TimeoutExpired:
-        raise _HerdrFailure("herdr timed out") from None
+        raise _HerdrFailure(
+            f"herdr not found: {argv[0]}",
+            argv=argv,
+        ) from None
+    except subprocess.TimeoutExpired as exc:
+        raise _HerdrFailure(
+            "herdr timed out",
+            argv=argv,
+            stderr=_stderr_text(getattr(exc, "stderr", None)),
+            enrich=True,
+        ) from None
     returncode = getattr(result, "returncode", 1)
     if returncode != 0:
-        raise _HerdrFailure(f"herdr exited {returncode}")
+        raise _HerdrFailure(
+            f"herdr exited {returncode}",
+            argv=argv,
+            stderr=_stderr_text(getattr(result, "stderr", None)),
+            enrich=True,
+        )
     stdout = getattr(result, "stdout", None)
     if isinstance(stdout, bytes):
         stdout = stdout.decode("utf-8", errors="replace")
     if not isinstance(stdout, str):
-        raise _HerdrFailure("malformed JSON from herdr")
+        raise _HerdrFailure("malformed JSON from herdr", argv=argv)
     return stdout
 
 
-def _join_rows(records: list[dict], workspaces: list[dict]) -> list[dict]:
+def _load_json(runner: Callable, argv: list[str], timeout: float) -> str:
+    stdout = _run_herdr(runner, argv, timeout)
+    try:
+        json.loads(stdout)
+    except json.JSONDecodeError:
+        raise _HerdrFailure("malformed JSON from herdr", argv=argv) from None
+    return stdout
+
+
+def _version_text(stdout: str) -> str | None:
+    if not stdout:
+        return None
+    line = stdout.splitlines()[0].strip()
+    return line or None
+
+
+def _read_version(runner: Callable, herdr_bin: str, timeout: float) -> str | None:
+    try:
+        stdout = _run_herdr(runner, [herdr_bin, "--version"], timeout)
+    except _HerdrFailure:
+        return None
+    except Exception as exc:
+        if isinstance(exc, AssertionError):
+            raise
+        return None
+    return _version_text(stdout)
+
+
+def _tab_labels(tabs: list[dict]) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for tab in tabs:
+        tab_id = tab.get("tab_id") or ""
+        if tab_id:
+            labels[tab_id] = tab.get("label") or ""
+    return labels
+
+
+def _join_rows(
+    records: list[dict],
+    workspaces: list[dict],
+    tab_labels: dict[str, str] | None = None,
+) -> list[dict]:
     labels = {
         item["workspace_id"]: item.get("label") or ""
         for item in workspaces
         if item.get("workspace_id")
     }
-    return [_herdr_row(record, labels) for record in records]
+    joined = tab_labels or {}
+    return [_herdr_row(record, labels, joined) for record in records]
+
+
+def _apply_failure(outcome: _HerdrOutcome, failure: _HerdrFailure) -> _HerdrOutcome:
+    outcome.error = failure.message
+    outcome.rows = []
+    outcome.reachable = False
+    outcome.reason, outcome.command = _block_reason(
+        failure.message,
+        failure.argv,
+        failure.stderr,
+        failure.enrich,
+    )
+    return outcome
 
 
 def _collect_herdr(
     runner: Callable,
     herdr_bin: str,
     timeout: float,
-) -> tuple[list[dict], str | None]:
+    *,
+    herdr_session: str | None,
+    herdr_config_dir: str,
+    now: datetime | None,
+) -> _HerdrOutcome:
+    outcome = _HerdrOutcome()
+    session: str | None = None
+    if herdr_session is not None:
+        stripped = herdr_session.strip()
+        outcome.session = stripped
+        if stripped.casefold() == "default":
+            return _refuse(outcome, "refusing session default", refused=True)
+        if _SESSION_NAME_RE.fullmatch(stripped) is None:
+            return _refuse(outcome, "invalid HERDR_SESSION", refused=False)
+        if herdr_config_dir and not os.path.isfile(
+            os.path.join(herdr_config_dir, "config.toml")
+        ):
+            return _refuse(outcome, "herdr config not mounted", refused=False)
+        session = stripped
+    prefix = [herdr_bin] if session is None else [herdr_bin, "--session", session]
     try:
-        workspace_stdout = _run_herdr(runner, [herdr_bin, "workspace", "list"], timeout)
-        workspaces = parse_herdr_workspace_list(workspace_stdout)
-        agent_stdout = _run_herdr(runner, [herdr_bin, "agent", "list"], timeout)
-        agents = parse_herdr_agent_list(agent_stdout)
+        workspace_stdout = _load_json(runner, prefix + ["workspace", "list"], timeout)
+        outcome.workspaces = parse_herdr_workspace_list(workspace_stdout)
+        tab_labels: dict[str, str] = {}
+        if session is not None:
+            tab_stdout = _load_json(runner, prefix + ["tab", "list"], timeout)
+            tabs = parse_herdr_tab_list(tab_stdout)
+            outcome.tab_count = len(tabs)
+            tab_labels = _tab_labels(tabs)
+        agent_stdout = _load_json(runner, prefix + ["agent", "list"], timeout)
+        agents = parse_herdr_agent_list(agent_stdout, now)
         if not agents:
-            snapshot_stdout = _run_herdr(runner, [herdr_bin, "api", "snapshot"], timeout)
-            agents = parse_herdr_snapshot(snapshot_stdout)
-        return _join_rows(agents, workspaces), None
+            snapshot_stdout = _load_json(runner, prefix + ["api", "snapshot"], timeout)
+            agents = parse_herdr_snapshot(snapshot_stdout, now)
+        outcome.rows = _join_rows(agents, outcome.workspaces, tab_labels)
+        outcome.reachable = True
+        outcome.error = None
+        outcome.reason = None
+        outcome.command = None
+        if session is not None:
+            outcome.version = _read_version(runner, herdr_bin, timeout)
+        return outcome
     except _HerdrFailure as exc:
-        return [], exc.message
-    except json.JSONDecodeError:
-        return [], "malformed JSON from herdr"
+        return _apply_failure(outcome, exc)
 
 
 def _read_text(path: str) -> str | None:
@@ -437,11 +749,21 @@ def _proc_rows(
         prev = previous.get(pid)
         prev_ticks = (prev["utime"] + prev["stime"]) if prev else 0
         curr_ticks = current[pid]["utime"] + current[pid]["stime"]
+        elapsed_seconds = _elapsed_seconds(
+            uptime,
+            current[pid]["starttime"],
+            clock_ticks,
+        )
         rows.append(
             {
                 "source": "proc",
+                "workspace_id": "",
                 "workspace_label": "",
                 "label": matching[pid],
+                "tab_id": "",
+                "tab_label": "",
+                "pane_id": "",
+                "kind": "",
                 "status": "unknown",
                 "cwd": _proc_cwd(proc_root, pid),
                 "session": "",
@@ -454,11 +776,8 @@ def _proc_rows(
                     curr_total,
                     ncpu,
                 ),
-                "elapsed_seconds": _elapsed_seconds(
-                    uptime,
-                    current[pid]["starttime"],
-                    clock_ticks,
-                ),
+                "elapsed_seconds": elapsed_seconds,
+                "elapsed_source": "proc" if elapsed_seconds is not None else "unknown",
             }
         )
     return rows
@@ -519,6 +838,8 @@ def collect_agents(
     *,
     herdr_bin: str = "herdr",
     herdr_timeout: float = 3.0,
+    herdr_session: str | None = None,
+    herdr_config_dir: str = "",
     patterns: tuple[str, ...] = _DEFAULT_PATTERNS,
     proc_root: str = "/proc",
     now: datetime | None = None,
@@ -543,11 +864,24 @@ def collect_agents(
     run = runner if runner is not None else _default_runner
     pause = sleep if sleep is not None else time.sleep
     try:
-        herdr_rows, herdr_error = _collect_herdr(run, herdr_bin, herdr_timeout)
+        herdr = _collect_herdr(
+            run,
+            herdr_bin,
+            herdr_timeout,
+            herdr_session=herdr_session,
+            herdr_config_dir=herdr_config_dir,
+            now=now,
+        )
     except Exception as exc:
         if isinstance(exc, AssertionError):
             raise
-        herdr_rows, herdr_error = [], "collector error"
+        herdr = _HerdrOutcome()
+        herdr.error = "collector error"
+        herdr.reason = "collector error"
+        if herdr_session is not None:
+            herdr.session = herdr_session.strip()
+    herdr_rows = herdr.rows
+    herdr_error = herdr.error
     if page_size_known is None:
         proc_rows, proc_error = [], f"proc not readable: {proc_root}"
     else:
@@ -575,4 +909,6 @@ def collect_agents(
             _source("proc", proc_error, len(proc_rows), refreshed_at),
         ],
         "agents": agents,
+        "herdr": _herdr_block(herdr),
+        "workspaces": list(herdr.workspaces),
     }

@@ -8,6 +8,17 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body data-refresh="{{ refresh_seconds }}">
+  {% macro human(value) -%}
+  {%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
+  {%- endmacro %}
+  {% macro health_word(value) -%}
+  {%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}none{%- else -%}{{ value }}{%- endif -%}
+  {%- endmacro %}
+  {% macro bar_width(value) -%}
+  {%- if value is number -%}
+  {%- if value < 0 -%}0{%- elif value > 100 -%}100{%- else -%}{{ value }}{%- endif -%}
+  {%- else -%}0{%- endif -%}
+  {%- endmacro %}
   <header>
     <h1>Dashboard</h1>
     <p class="updated">Last updated <time id="last-updated">{{ generated_at }}</time></p>
@@ -24,29 +35,76 @@
   <main>
     <section id="panel-containers">
       <h2>Containers</h2>
+      <div class="filters">
+        <label for="container-filter-text">Filter
+          <input id="container-filter-text" type="text" autocomplete="off">
+        </label>
+        <label for="container-filter-state">State
+          <select id="container-filter-state">
+            <option value="All">All</option>
+            <option value="Running">Running</option>
+            <option value="Stopped">Stopped</option>
+          </select>
+        </label>
+        <label for="container-filter-hide-healthy">
+          <input id="container-filter-hide-healthy" type="checkbox">
+          Hide healthy
+        </label>
+        <p id="container-filter-count">{% if containers.available %}{{ containers.containers|length }} of {{ containers.containers|length }} shown{% else %}0 of 0 shown{% endif %}</p>
+      </div>
       <div id="containers-body">
         {% if not containers.available %}
         <p>unavailable: {{ containers.reason }}</p>
         {% elif not containers.containers %}
         <p>No containers.</p>
         {% else %}
-        {% for row in containers.containers %}
-        <article>
-          <h3>{{ row.name }}</h3>
-          <p>{{ row.image }}</p>
-          <p>{{ row.state }}{% if row.health %} · {{ row.health }}{% endif %}</p>
-          <p>uptime {{ row.uptime_seconds }}</p>
-          <p>restarts {{ row.restart_count }}</p>
-          <p>cpu {{ row.cpu_percent }}</p>
-          <p>memory {{ row.memory_used_bytes }} / {{ row.memory_limit_bytes }}</p>
-        </article>
-        {% endfor %}
+        <div class="container-grid">
+          {% for row in containers.containers %}
+          {% set title = row.compose_service if row.compose_service else (row.name if row.name else "unknown") %}
+          {% set image = row.image_short if row.image_short else (row.image if row.image else "unknown") %}
+          {% set state_word = human(row.state_label) %}
+          {% set health = health_word(row.health_label) %}
+          {% set meter = namespace(memory=0) %}
+          {% if row.memory_percent is number %}
+          {% set meter.memory = row.memory_percent %}
+          {% elif row.memory_used_bytes is number and row.memory_limit_bytes is number and row.memory_limit_bytes > 0 %}
+          {% set meter.memory = row.memory_used_bytes / row.memory_limit_bytes * 100 %}
+          {% endif %}
+          <article class="container-card">
+            <h3>{{ title }}</h3>
+            <p>id {{ human(row.id_short) }}</p>
+            <p>{{ image }}</p>
+            <p><span class="badge state-{{ state_word }}">{{ state_word }}</span> <span class="badge health-{{ health }}">{{ health }}</span></p>
+            <p>uptime {{ human(row.uptime_human) }}</p>
+            <p>restarts {{ human(row.restart_count) }}</p>
+            <p>cpu {{ human(row.cpu_percent_human) }}</p>
+            <div class="meter" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
+            <p>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</p>
+            <div class="meter" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill" style="width: {{ bar_width(meter.memory) }}%"></span></div>
+          </article>
+          {% endfor %}
+        </div>
         {% endif %}
       </div>
     </section>
 
     <section id="panel-agents">
       <h2>Agents</h2>
+      {% set agent_herdr = agents.herdr if agents.herdr is mapping else {} %}
+      <div id="herdr-block">
+        <p>reachable {{ "true" if agent_herdr.reachable else "false" }}</p>
+        <p>version {{ human(agent_herdr.version) }}</p>
+        <p>session {{ human(agent_herdr.session) }}</p>
+        <p>workspaces {{ agent_herdr.workspace_count if agent_herdr.workspace_count is number else 0 }}</p>
+        <p>tabs {{ agent_herdr.tab_count if agent_herdr.tab_count is number else 0 }}</p>
+        <p>agents {{ agent_herdr.agent_count if agent_herdr.agent_count is number else 0 }}</p>
+        {% if agent_herdr.reason %}
+        <p>{{ agent_herdr.reason }}</p>
+        {% endif %}
+        {% if not agent_herdr.reachable %}
+        <p>unavailable: {{ agent_herdr.reason if agent_herdr.reason else "herdr unavailable" }}</p>
+        {% endif %}
+      </div>
       <div id="agents-body">
         {% for source in agents.sources %}
         <p>source {{ source.name }} used {{ "true" if source.used else "false" }} refreshed_at {{ source.refreshed_at }}{% if source.error %} error {{ source.error }}{% endif %}</p>
@@ -54,13 +112,30 @@
         {% if agents.note %}
         <p>{{ agents.note }}</p>
         {% endif %}
+        {% set groups = namespace(titles=[]) %}
         {% for agent in agents.agents %}
-        <article>
-          <h3>{{ agent.label }}</h3>
-          <p>{{ agent.status }}</p>
-          <p>{{ agent.cwd }}</p>
-          <p>{{ agent.source }}</p>
-        </article>
+        {% set title = agent.workspace_label if agent.workspace_label else ("proc" if agent.source == "proc" else "unknown") %}
+        {% if title not in groups.titles %}
+        {% set groups.titles = groups.titles + [title] %}
+        {% endif %}
+        {% endfor %}
+        {% for title in groups.titles %}
+        <div class="workspace-group">
+          <h3>{{ title }}</h3>
+          {% for agent in agents.agents %}
+          {% set agent_title = agent.workspace_label if agent.workspace_label else ("proc" if agent.source == "proc" else "unknown") %}
+          {% if agent_title == title %}
+          <article>
+            <p>kind {{ human(agent.kind) }}</p>
+            <p>workspace {{ agent.workspace_label if agent.workspace_label else title }}</p>
+            <p>tab {{ human(agent.tab_label) }}</p>
+            <p>status {{ human(agent.status) }}</p>
+            <p>cwd {{ human(agent.cwd) }}</p>
+            <p>elapsed {{ agent.elapsed_human if agent.elapsed_source == "herdr" and agent.elapsed_human else "unknown" }}</p>
+          </article>
+          {% endif %}
+          {% endfor %}
+        </div>
         {% endfor %}
       </div>
     </section>
@@ -91,6 +166,56 @@
         {% endfor %}
       </div>
     </section>
+
+    <section id="panel-sessions">
+      <h2>Sessions</h2>
+      <p id="sessions-unavailable">{% if not sessions.available %}unavailable: {{ sessions.reason }}{% endif %}</p>
+      <form id="new-session-form" method="post" action="/api/sessions" data-mutations-enabled="{{ "true" if sessions.mutations_enabled else "false" }}">
+        <label for="session-kind">Kind
+          <select id="session-kind" name="kind"{% if not sessions.mutations_enabled %} disabled{% endif %}>
+            {% for kind in sessions.kinds %}
+            <option value="{{ kind }}">{{ kind }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label for="session-cwd">Cwd
+          <input id="session-cwd" name="cwd" type="text" autocomplete="off"{% if not sessions.mutations_enabled %} disabled{% endif %}>
+        </label>
+        <label for="session-label">Label
+          <input id="session-label" name="label" type="text" autocomplete="off"{% if not sessions.mutations_enabled %} disabled{% endif %}>
+        </label>
+        <label for="session-token">Token
+          <input id="session-token" type="password" autocomplete="off"{% if not sessions.mutations_enabled %} disabled{% endif %}>
+        </label>
+        {% if not sessions.mutations_enabled %}
+        <p>CHAT_API_TOKEN unset</p>
+        {% if sessions.reason %}
+        <p>{{ sessions.reason }}</p>
+        {% endif %}
+        {% endif %}
+        <button type="submit" id="session-submit"{% if not sessions.mutations_enabled %} disabled{% endif %}>Start</button>
+      </form>
+      <p id="session-action-reason"></p>
+      <p>Archive only updates this dashboard. It does not stop or delete the herdr workspace, tab, or agent.</p>
+      <p>herdr session attach &lt;name&gt; attaches the herdr session, not one workspace. herdr --session &lt;name&gt; attach is not a working command on herdr 0.9.5.</p>
+      <div id="sessions-body">
+        {% for row in sessions.sessions %}
+        <article class="session-card">
+          <p>label {{ human(row.label) }}</p>
+          <p>kind {{ human(row.agent_kind) }}</p>
+          <p>workspace {{ human(row.workspace_id) }}</p>
+          <p>status {{ human(row.status) }}</p>
+          <p>cwd {{ human(row.cwd) }}</p>
+          <p>created {{ human(row.created_relative) }}</p>
+          <p>updated {{ human(row.updated_relative) }}</p>
+          <a href="/herdr/" target="_blank" rel="noopener noreferrer">Open Herdr Web</a>
+          <input class="attach-command" type="text" readonly value="{{ row.attach_command }}">
+          <button type="button" class="copy-attach" data-attach-command="{{ row.attach_command }}">Copy</button>
+          <button type="button" class="archive-session" data-session-id="{{ row.id }}"{% if not sessions.mutations_enabled %} disabled{% endif %}>Archive</button>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
   </main>
 
   <section id="herdr-frame">
@@ -101,6 +226,7 @@
     {% endif %}
   </section>
 
+  <script src="/static/container_filters.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

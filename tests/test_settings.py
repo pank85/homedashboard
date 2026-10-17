@@ -3,8 +3,14 @@
 Imports only app.settings: no collectors, main, or proxy.
 """
 
+import dataclasses
+import pathlib
+
 from app.settings import (
     DEFAULT_AGENT_PROCESS_PATTERNS,
+    DEFAULT_DB_PATH,
+    DEFAULT_HERDR_SESSION,
+    DEFAULT_SNAPSHOT_RETENTION_DAYS,
     Settings,
     herdr_embed_src,
     load_settings,
@@ -144,6 +150,115 @@ def test_token_never_in_public_helpers():
 def test_load_settings_none_reads_os_environ(monkeypatch):
     monkeypatch.setenv("DASHBOARD_PORT", "9999")
     assert load_settings().dashboard_port == 9999
+
+
+ROUND2_FIELDS = (
+    "herdr_session",
+    "chat_api_token",
+    "chat_cwd_allowlist",
+    "db_path",
+    "herdr_snapshot_retention_days",
+)
+
+
+def test_round2_defaults():
+    settings = load_settings({})
+
+    assert settings.herdr_session == DEFAULT_HERDR_SESSION == "hermes"
+    assert settings.chat_api_token == ""
+    assert settings.chat_cwd_allowlist == ()
+    assert settings.db_path == DEFAULT_DB_PATH == "/data/dashboard.db"
+    assert settings.herdr_snapshot_retention_days == 7
+    assert DEFAULT_SNAPSHOT_RETENTION_DAYS == 7
+
+
+def test_round2_fields_are_appended_last_with_defaults():
+    fields = dataclasses.fields(Settings)
+    assert tuple(field.name for field in fields)[-len(ROUND2_FIELDS) :] == ROUND2_FIELDS
+    defaults = {field.name: field.default for field in fields}
+    assert defaults["herdr_session"] == "hermes"
+    assert defaults["chat_api_token"] == ""
+    assert defaults["chat_cwd_allowlist"] == ()
+    assert defaults["db_path"] == "/data/dashboard.db"
+    assert defaults["herdr_snapshot_retention_days"] == 7
+
+
+def test_legacy_keyword_construction_still_works():
+    base = load_settings({})
+    legacy = {
+        field.name: getattr(base, field.name)
+        for field in dataclasses.fields(Settings)
+        if field.name not in ROUND2_FIELDS
+    }
+
+    built = Settings(**legacy)
+
+    assert built.dashboard_port == 8080
+    assert built.herdr_session == "hermes"
+    assert built.chat_api_token == ""
+    assert built.chat_cwd_allowlist == ()
+    assert built.db_path == "/data/dashboard.db"
+    assert built.herdr_snapshot_retention_days == 7
+
+
+def test_herdr_session_strip_and_empty_default():
+    assert load_settings({"HERDR_SESSION": "  ops  "}).herdr_session == "ops"
+    assert load_settings({"HERDR_SESSION": "   "}).herdr_session == "hermes"
+    assert load_settings({"HERDR_SESSION": ""}).herdr_session == "hermes"
+
+
+def test_herdr_session_default_is_stored_verbatim_not_rewritten():
+    assert load_settings({"HERDR_SESSION": "default"}).herdr_session == "default"
+    assert load_settings({"HERDR_SESSION": "DEFault"}).herdr_session == "default"
+    assert load_settings({"HERDR_SESSION": " default "}).herdr_session == "default"
+
+
+def test_chat_api_token_strip_and_empty():
+    assert load_settings({"CHAT_API_TOKEN": "  tok  "}).chat_api_token == "tok"
+    assert load_settings({"CHAT_API_TOKEN": "   "}).chat_api_token == ""
+    assert load_settings({"CHAT_API_TOKEN": ""}).chat_api_token == ""
+
+
+def test_chat_api_token_absent_from_repr():
+    settings = load_settings({"CHAT_API_TOKEN": "super-secret-token"})
+
+    assert settings.chat_api_token == "super-secret-token"
+    assert "super-secret-token" not in repr(settings)
+    assert "super-secret-token" not in str(settings)
+
+
+def test_chat_cwd_allowlist_parsed_as_csv():
+    settings = load_settings({"CHAT_CWD_ALLOWLIST": " /a , /b ,, /c "})
+
+    assert settings.chat_cwd_allowlist == ("/a", "/b", "/c")
+    assert load_settings({}).chat_cwd_allowlist == ()
+    assert load_settings({"CHAT_CWD_ALLOWLIST": "  "}).chat_cwd_allowlist == ()
+
+
+def test_db_path_missing_key_uses_default():
+    assert load_settings({}).db_path == "/data/dashboard.db"
+    assert load_settings({"DB_PATH": " /tmp/x.db "}).db_path == "/tmp/x.db"
+
+
+def test_db_path_blank_disables_persistence():
+    assert load_settings({"DB_PATH": ""}).db_path == ""
+    assert load_settings({"DB_PATH": "   "}).db_path == ""
+    assert load_settings({"DB_PATH": "\t"}).db_path == ""
+
+
+def test_retention_days_falls_back_below_one_or_invalid():
+    assert load_settings({"HERDR_SNAPSHOT_RETENTION_DAYS": "14"}).herdr_snapshot_retention_days == 14
+    for bad in ("0", "-1", "abc", "", "   "):
+        loaded = load_settings({"HERDR_SNAPSHOT_RETENTION_DAYS": bad})
+        assert loaded.herdr_snapshot_retention_days == 7
+
+
+def test_collectors_do_not_import_settings():
+    collectors = pathlib.Path(__file__).resolve().parent.parent / "app" / "collectors"
+    for module in collectors.rglob("*.py"):
+        source = module.read_text(encoding="utf-8")
+        assert "import settings" not in source
+        assert "app.settings" not in source
 
 
 def test_settings_is_frozen():

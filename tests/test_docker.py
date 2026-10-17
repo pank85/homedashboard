@@ -178,6 +178,137 @@ def test_sort_unhealthy_and_restarting_before_running_by_name():
     assert by_name["d"]["uptime_seconds"] is None
 
 
+def test_compose_service_from_list_overridden_by_inspect():
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "abcdef0123456789",
+                    "Names": ["/web"],
+                    "Image": "img:1",
+                    "State": "running",
+                    "Labels": {"com.docker.compose.service": "web"},
+                }
+            ]
+        if path.endswith("/json"):
+            inspected = _inspect("web", "running", health="healthy")
+            inspected["Config"] = {
+                "Labels": {"com.docker.compose.service": "web-inspect"}
+            }
+            return inspected
+        if path.endswith("/stats"):
+            return _stats()
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    row = result["containers"][0]
+    assert row["compose_service"] == "web-inspect"
+    assert row["id_short"] == "abcdef012345"
+    assert row["id"] == "abcdef0123456789"
+
+
+def test_compose_service_missing_is_empty_and_inspect_keeps_list_value():
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "a",
+                    "Names": ["/one"],
+                    "Image": "img:1",
+                    "State": "running",
+                    "Labels": {"com.docker.compose.service": "svc-one"},
+                },
+                {
+                    "Id": "b",
+                    "Names": ["/two"],
+                    "Image": "img:2",
+                    "State": "running",
+                },
+            ]
+        if path.endswith("/containers/a/json"):
+            # Inspect has no Config.Labels; the list value must survive.
+            return _inspect("one", "running", health="healthy")
+        if path.endswith("/containers/a/stats"):
+            return _stats()
+        if path.endswith("/containers/b/json"):
+            return _inspect("two", "running", health="healthy")
+        if path.endswith("/containers/b/stats"):
+            return _stats()
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    by_name = {row["name"]: row for row in result["containers"]}
+    assert by_name["one"]["compose_service"] == "svc-one"
+    assert by_name["two"]["compose_service"] == ""
+    assert by_name["one"]["id_short"] == "a"
+    assert by_name["two"]["id_short"] == "b"
+
+
+def test_row_without_health_or_stats_has_new_keys():
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "deadbeefcafe0001",
+                    "Names": ["/idle"],
+                    "Image": "img:idle",
+                    "State": "exited",
+                }
+            ]
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    assert result["available"] is True
+    row = result["containers"][0]
+    # Inspect is never reached for this container, so the list-only row still
+    # carries both new keys.
+    assert row["health"] is None
+    assert row["cpu_percent"] is None
+    assert row["memory_used_bytes"] is None
+    assert row["memory_limit_bytes"] is None
+    assert row["compose_service"] == ""
+    assert row["id_short"] == "deadbeefcafe"
+
+
+def test_id_short_empty_when_id_empty():
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "",
+                    "Names": ["/anon"],
+                    "Image": "img:anon",
+                    "State": "exited",
+                }
+            ]
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    row = result["containers"][0]
+    assert row["id"] == ""
+    assert row["id_short"] == ""
+
+
 def test_cpu_percent_from_stats_delta_and_memory_copied():
     stats = _stats()
     assert cpu_percent_from_stats(stats) == 100.0

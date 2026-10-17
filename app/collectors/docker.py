@@ -256,11 +256,14 @@ def _row_from_list(item: dict) -> dict:
         name = _strip_one_slash(names[0])
     image = item.get("Image")
     state = item.get("State")
+    container_id = raw_id if isinstance(raw_id, str) else ""
     return {
-        "id": raw_id if isinstance(raw_id, str) else "",
+        "id": container_id,
+        "id_short": container_id[:12],
         "name": name,
         "image": image if isinstance(image, str) else "",
         "state": state if isinstance(state, str) else "",
+        "compose_service": _compose_service_from_labels(item.get("Labels")),
         "health": None,
         "uptime_seconds": None,
         "restart_count": 0,
@@ -268,6 +271,13 @@ def _row_from_list(item: dict) -> dict:
         "memory_used_bytes": None,
         "memory_limit_bytes": None,
     }
+
+
+def _compose_service_from_labels(labels: object) -> str:
+    if not isinstance(labels, dict):
+        return ""
+    service = labels.get("com.docker.compose.service")
+    return service if isinstance(service, str) else ""
 
 
 def _apply_inspect(row: dict, inspected: dict, moment: datetime) -> None:
@@ -290,6 +300,11 @@ def _apply_inspect(row: dict, inspected: dict, moment: datetime) -> None:
                     0, int((moment - started).total_seconds())
                 )
     row["restart_count"] = _as_restart_count(inspected.get("RestartCount"))
+    config = inspected.get("Config")
+    if isinstance(config, dict):
+        service = _compose_service_from_labels(config.get("Labels"))
+        if service:
+            row["compose_service"] = service
 
 
 def _memory_bytes(stats: dict) -> tuple[int | None, int | None]:

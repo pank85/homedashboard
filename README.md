@@ -4,7 +4,7 @@
 
 A single self-hosted container that serves one web page: Docker containers, running AI coding agents, host CPU / RAM / disk, and a one-click **Open Herdr Web** entry point. A stranger can run it with only a published port. Configuration is environment variables. There is no login screen and no host CLI to install by hand.
 
-v1 is read-only and will not start or stop containers. The app issues Docker GET requests only. Missing docker, herdr, `/proc`, or host root degrades that panel to `unavailable: <reason>`. The process still serves the page. Neither HTML nor JSON includes a traceback.
+Containers are read-only: the app issues Docker GET requests only and will not start or stop them. The other writes are this dashboard's own chat session records, which are token-gated (see [Chat sessions](#chat-sessions-round-2)). Missing docker, herdr, `/proc`, or host root degrades that panel to `unavailable: <reason>`. The process still serves the page. Neither HTML nor JSON includes a traceback.
 
 One published port: **8080**. The internal herdr UI on `127.0.0.1:7317` is not published. `REFRESH_SECONDS=0` disables polling (default `5`). Warn/crit thresholds default to **75/90**.
 
@@ -18,6 +18,9 @@ The page is server-rendered (FastAPI, Uvicorn, Jinja2) with a small amount of va
 | `GET /api/containers` | Containers panel |
 | `GET /api/agents` | Agents panel |
 | `GET /api/host` | Host CPU, RAM, and disk |
+| `GET /api/sessions` | Chat session records. Not token-gated. |
+| `POST /api/sessions` | Create a herdr workspace plus one agent in it and record the session. Token-gated. |
+| `POST /api/sessions/{id}/archive` | Mark this dashboard's session `archived`. Token-gated. No herdr call. |
 
 Agents come from herdr and, as a fallback, a `/proc` process scan. Both sources may be combined. Rows are not deduped; `source` distinguishes them. Empty from both is `no agents detected`, not an error.
 
@@ -53,7 +56,7 @@ Configuration is environment variables. No host CLI install. The published port 
 docker run --rm --env-file .env -p 8080:8080 homedashboard:local
 ```
 
-Compose reads `.env` next to `docker-compose.yml` into the container via `env_file` (`path: .env`, `required: false`). That is not Compose interpolation. Interpolation substitutes `${DASHBOARD_PUBLISH_PORT}`, `${DOCKER_SOCKET}`, `${HOST_ROOT_SOURCE}`, and `${HERDR_CONFIG_SOURCE}` into the compose file before the container starts. `env_file` injects variables into the container process. One `.env` can hold both. Absence of the file is not an error.
+Compose reads `.env` next to `docker-compose.yml` into the container via `env_file` (`path: .env`, `required: false`). That is not Compose interpolation. Interpolation substitutes `${DASHBOARD_PUBLISH_PORT}`, `${DOCKER_SOCKET}`, `${HOST_ROOT_SOURCE}`, and `${HERDR_CONFIG_SOURCE}` into the compose file before the container starts, and `${HERDR_SESSION}`, `${DB_PATH}`, and `${HERDR_SNAPSHOT_RETENTION_DAYS}` into its `environment` block. `${HERDR_HOST_CONFIG_SOURCE}` and `${DASHBOARD_DATA_SOURCE}` appear only on commented volume lines, so they are never required. `env_file` injects variables into the container process. One `.env` can hold both. Absence of the file is not an error.
 
 Attach to an existing host herdr Web UI with placeholders only. This does not start a second herdr server. The button opens that existing UI. Do not publish `7317` from this container.
 
@@ -75,7 +78,7 @@ Embedded mode sees only the container's own herdr sessions, not the host user's 
 docker compose up --build
 ```
 
-`docker-compose.yml` is the stranger-facing path: one published port, three mounts, no `pid: host`. It does not publish `7317`. It does not set `HERDR_CONFIG_DIR` in `environment` (an empty mount must not hide an in-container config). Image `homedashboard:local`. `restart: unless-stopped`. No `container_name`, no registry host. `env_file` is long syntax `path: .env`, `required: false`. A missing `.env` is not an error. Compose does not activate `pid: host`.
+`docker-compose.yml` is the stranger-facing path: one published port, three live mounts, two commented mounts, no `pid: host`. It does not publish `7317`. It does not set `HERDR_CONFIG_DIR` in `environment` (an empty mount must not hide an in-container config). It sets only `HERDR_SESSION`, `DB_PATH`, and `HERDR_SNAPSHOT_RETENTION_DAYS` in `environment`, and deliberately not `CHAT_API_TOKEN` or `CHAT_CWD_ALLOWLIST` (an empty interpolation there would override `env_file`). Image `homedashboard:local`. `restart: unless-stopped`. No `container_name`, no registry host. `env_file` is long syntax `path: .env`, `required: false`. A missing `.env` is not an error. Compose does not activate `pid: host`. The two extra mounts stay comments so a stranger with no herdr and no data directory can still `docker compose up`.
 
 ```yaml
 services:
@@ -88,6 +91,14 @@ services:
     env_file:
       - path: .env
         required: false
+    # Safe defaults for the round-2 keys, overridable from the shell or .env.
+    # CHAT_API_TOKEN and CHAT_CWD_ALLOWLIST are deliberately absent: an empty
+    # interpolation here would override the value from env_file. They ride
+    # env_file only.
+    environment:
+      HERDR_SESSION: ${HERDR_SESSION:-hermes}
+      DB_PATH: ${DB_PATH:-/data/dashboard.db}
+      HERDR_SNAPSHOT_RETENTION_DAYS: ${HERDR_SNAPSHOT_RETENTION_DAYS:-7}
     # PID namespace: default is the container namespace. The FR2 process scan
     # then sees only this container's processes. Host CPU/RAM from /proc/stat
     # and /proc/meminfo are still host-wide. Opt in only if you accept the
@@ -97,11 +108,19 @@ services:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ${HOST_ROOT_SOURCE:-/}:/host:ro
       - ${HERDR_CONFIG_SOURCE:-./docker/empty-herdr}:/herdr-config:ro
+      # Host herdr config at herdr's default path. This image runs as root, so the
+      # default path inside the container is /root/.config/herdr. Leave commented
+      # if you have no herdr; the empty /herdr-config mount above still works.
+      # - ${HERDR_HOST_CONFIG_SOURCE}:/root/.config/herdr:ro
+      # SQLite bind. Leave commented to keep an ephemeral /data (sessions die with the container).
+      # - ${DASHBOARD_DATA_SOURCE}:/data
 ```
 
 The published mapping is host `${DASHBOARD_PUBLISH_PORT:-8080}` to container port `8080`. The process listens on `DASHBOARD_PORT` (default `8080`). Keep those the same.
 
 `docker compose up` fails if the host docker socket path does not exist, because that bind is in the default file. `docker run -p 8080:8080` with no volumes is the nothing-mounted path.
+
+The `environment` block interpolates `${DB_PATH:-/data/dashboard.db}`, so a blank `DB_PATH` in the Compose `.env` falls back to the default instead of disabling persistence. To disable persistence under Compose, pass `DB_PATH=` explicitly with `docker run -e DB_PATH=` or set the `environment` value in an override file.
 
 ## Environment variables
 
@@ -142,6 +161,13 @@ The app reads these through `load_settings`. Defaults are generic. No hostnames,
 | `DASHBOARD_PUBLISH_PORT` | `8080` | compose-only. App does not read it. Host side of the published port. |
 | `HOST_ROOT_SOURCE` | `/` | compose-only. App does not read it. Host path mounted at `/host`. |
 | `HERDR_CONFIG_SOURCE` | `./docker/empty-herdr` | compose-only. App does not read it. Host path mounted at `/herdr-config`. |
+| `HERDR_SESSION` | `hermes` | str. Named herdr session the dashboard operates on. Blank becomes `hermes`. A `default` value (any case) is stored as given and refused at use. |
+| `CHAT_API_TOKEN` | empty | str. Unset or blank disables the mutating routes (`403`) and the New session control. Never written into the page. Leave empty in files you commit. |
+| `CHAT_CWD_ALLOWLIST` | empty | csv. Absolute path prefixes a new session may start in. Empty rejects every create (fail closed). No host path in this file. |
+| `DB_PATH` | `/data/dashboard.db` | str. Container path, not a host path. Omitting the key uses the default; setting it blank or whitespace **disables** persistence, the one key where blank does not mean default. The page still loads. |
+| `HERDR_SNAPSHOT_RETENTION_DAYS` | `7` | int. Snapshot rows older than this are deleted on the next write. Invalid or `< 1` falls back to `7`; `0` does not mean "keep forever". |
+| `HERDR_HOST_CONFIG_SOURCE` | empty | compose-only. App does not read it. Host directory for the commented default-path mount at `/root/.config/herdr`. Empty means do not use. |
+| `DASHBOARD_DATA_SOURCE` | empty | compose-only. App does not read it. Host directory for the commented `/data` bind. |
 
 Bool: empty or missing uses the default. Otherwise true only for `1`, `true`, `yes`, `on` (case-insensitive, stripped). The string `false` is false.
 
@@ -210,6 +236,48 @@ The token is not in the page source. Mechanism:
 
 Self-signed upstream certs are verified only if `HERDR_UPSTREAM_TLS_VERIFY=true` (default false), because the browser never sees the upstream cert on the proxy path. A direct `HERDR_WEB_URL` of `https://...` still requires the user to accept that origin in the browser.
 
+## Chat sessions (round 2)
+
+The page can create one herdr workspace per chat session and archive this dashboard's own record of it. Nothing else is writable: containers stay read-only and existing read-only endpoints stay read-only.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /api/sessions` | Session records. Not token-gated, read-only. |
+| `POST /api/sessions` | Validate, run `herdr workspace create`, then `herdr agent start` in the new root pane, and record the session. |
+| `POST /api/sessions/{id}/archive` | Set this dashboard's session status to `archived`. No herdr call. |
+
+### Token gate
+
+- `CHAT_API_TOKEN` unset or blank: every mutating request is `403` with reason `CHAT_API_TOKEN unset`, and the New session control is disabled in the page. Nothing is spawned.
+- Token set, request missing the token or carrying a wrong one: `401` with reason `invalid token`. Missing and wrong are the same status, so the endpoint does not confirm which tokens exist. `403` never means a bad token.
+- Validation failures are `400` with `{"error":"invalid","reason":"..."}`. The token is checked before cwd checks, so an unauthenticated caller cannot probe the filesystem.
+- The token is never rendered into the HTML or the JS source. The operator types it once into a password field; the page stores it in `localStorage` under the key `homedashboard.chatApiToken` and sends `Authorization: Bearer <token>`. Any script served from this origin can read that key, so treat the dashboard origin as trusted. There is no cookie and no query-string token.
+- `CHAT_CWD_ALLOWLIST` is the only source of permitted working directories. Empty rejects every create (`CHAT_CWD_ALLOWLIST unset`, fail closed). Entries are absolute path prefixes; `..` and symlinks that resolve outside a prefix are rejected. Prefix matching is path-based, so `/proj` does not allow `/proj-evil`.
+
+### Session name and scope
+
+`HERDR_SESSION` names the herdr session the dashboard operates on (default `hermes`). The herdr session `default` is always refused with the reason `refusing session default` before any process is spawned, so a misconfiguration cannot touch an operator's default session. Never operate on herdr session `default`: set `HERDR_SESSION` to a dedicated named session.
+
+One workspace per chat session. The dashboard calls `workspace create` (which already returns the root tab and pane) and then `agent start --pane <root pane>`. It never calls `tab create`, `workspace close`, `session stop`, or `session delete`.
+
+### Attach command
+
+```bash
+herdr session attach hermes
+```
+
+Replace `hermes` with your `HERDR_SESSION`. `herdr --session <name> attach` is **not** a working command on herdr 0.9.5: it only prints top-level help. The page states that mismatch next to the copy control.
+
+`herdr session attach <name>` attaches the whole herdr session, not one workspace. The page shows the workspace id beside the Herdr Web link so a human can find the right workspace inside Herdr Web. Click-through is always `/herdr/`; there is no per-workspace deep link.
+
+### Archive and failure
+
+Archive only updates this dashboard. It does not stop, close, or delete anything in herdr: not the session, not the workspace, not the tab, not the agent.
+
+If `workspace create` or `agent start` fails, the dashboard records `failed` for its own row and returns `502`. It does not close the herdr workspace it just created; the page says so, and closing is out of scope for this product. If the database is unavailable, a create returns `503` without spawning anything, so no untracked workspace is made.
+
+Session rows live in SQLite at `DB_PATH` (container path, default `/data/dashboard.db`). Without a `/data` bind the database is ephemeral and records die with the container. Setting `DB_PATH` to an empty string disables persistence; the sessions panel then reports itself unavailable and the other panels still render.
+
 ## Limitations
 
 These limits are part of the product. They are not optional footnotes.
@@ -246,9 +314,9 @@ The image still starts if the herdr install failed at build time. embedded mode 
 
 The container runs as root so a read-only docker socket is usable without a host-specific group id.
 
-Running as root is a privilege tradeoff, not a hidden default. v1 does not drop privileges. The socket mount is read-only. The app only issues Docker GET requests.
+Running as root is a privilege tradeoff, not a hidden default. v1 does not drop privileges. The socket mount is read-only. The app issues Docker GET requests only; the sole writes are its own chat session records.
 
-v1 is read-only and will not start or stop containers. Also out of scope: restart, delete, log streaming, authentication, alerting, multi-host, historical graphs, Kubernetes, and Windows-native deployment.
+Containers stay read-only: the app will not start, stop, or delete them. Also out of scope: restart, delete, log streaming, authenticating the whole dashboard (only the mutating session endpoints are token-gated), alerting, multi-host, historical graphs, Kubernetes, and Windows-native deployment.
 
 One published port: 8080. The internal herdr UI on 127.0.0.1:7317 is not published. `REFRESH_SECONDS=0` disables polling. Thresholds default 75/90.
 
@@ -260,6 +328,29 @@ One published port: 8080. The internal herdr UI on 127.0.0.1:7317 is not publish
 | host disk | `/` to `/host`, read-only | `HOST_ROOT`, `DISK_PATHS` | Host root inside the container is `HOST_ROOT` (default `/host`). Disks are `DISK_PATHS` (default `/host,/host/home`) when `PROC_ROOT`/`mounts` lists that mountpoint; otherwise the panel is container view. |
 | host herdr | host config directory, read-only, onto `/herdr-config` | `HERDR_CONFIG_SOURCE` and `HERDR_CONFIG_DIR=/herdr-config` | Compose mounts `HERDR_CONFIG_SOURCE` (default `./docker/empty-herdr`) and does not set `HERDR_CONFIG_DIR`. Set `HERDR_CONFIG_DIR=/herdr-config` only when the mount holds a real config, so the bundled CLI talks to the host server socket. A user-owned config directory is often `~/.config/herdr`. That path is an example in this note only, not a product default, and not a command to copy unchanged. |
 | host process scan | optional `pid: host` | no extra env | Privileged. Uncomment `# pid: "host"` in compose if you accept that. Not the default. Without it the agent process scan sees only the container's processes. |
+| host herdr, default path | host config directory, read-only, onto `/root/.config/herdr` (commented in compose) | `HERDR_HOST_CONFIG_SOURCE` | The verified approach (2026-10-17) for reaching the host CLI socket: mount the host config at herdr's default path inside the container. The image runs as root, so that path is `/root/.config/herdr`. A read-only mount is enough for listing; creating a session also needs a running host herdr server on that socket. Leave the compose line commented if you have no herdr. |
+| session persistence | host directory onto `/data` (commented in compose) | `DASHBOARD_DATA_SOURCE`, `DB_PATH` | Session records live in `DB_PATH` (default `/data/dashboard.db`). Compose leaves the `/data` bind commented, so without it `/data` is ephemeral and records die with the container. Setting `DB_PATH` empty disables persistence instead. |
+
+## Homeserver compose fragment (not applied by this repo)
+
+The live file `~/homeserver/docker-compose/homedashboard` is outside this checkout. Workers and CI in this repository do not edit it and this repository does not apply these settings. An operator copies the fragment below into that file by hand.
+
+The absolute paths are EXAMPLE ONLY, for one host. They are not product defaults, they are not in this repository's uncommented compose values, and they are not Python defaults. Do not uncomment host-specific mounts in the committed `docker-compose.yml`; a stranger without those directories would fail to start.
+
+```yaml
+# EXAMPLE ONLY. Not applied by this repository.
+volumes:
+  - /home/pank/.config/herdr:/root/.config/herdr:ro
+  - /home/pank/docker-data/homedashboard:/data
+environment:
+  HERDR_SESSION: hermes
+  DB_PATH: /data/dashboard.db
+  HERDR_SNAPSHOT_RETENTION_DAYS: "7"
+  CHAT_CWD_ALLOWLIST: /home/pank/projects
+  CHAT_API_TOKEN: ${CHAT_API_TOKEN}
+```
+
+`CHAT_API_TOKEN` comes from the homeserver `.env`, never committed. Quote `HERDR_SNAPSHOT_RETENTION_DAYS` in YAML so it is not read as a number by tooling that expects a string.
 
 ## Development
 

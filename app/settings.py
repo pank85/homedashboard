@@ -7,9 +7,13 @@ Collectors must not import this module; only ``app.main`` and
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 VALID_HERDR_MODES = ("embedded", "external", "off")
+
+DEFAULT_HERDR_SESSION = "hermes"
+DEFAULT_DB_PATH = "/data/dashboard.db"
+DEFAULT_SNAPSHOT_RETENTION_DAYS = 7
 
 DEFAULT_AGENT_PROCESS_PATTERNS = (
     "claude",
@@ -59,6 +63,11 @@ class Settings:
     mem_crit: float
     disk_warn: float
     disk_crit: float
+    herdr_session: str = DEFAULT_HERDR_SESSION
+    chat_api_token: str = field(default="", repr=False)
+    chat_cwd_allowlist: tuple[str, ...] = ()
+    db_path: str = DEFAULT_DB_PATH
+    herdr_snapshot_retention_days: int = DEFAULT_SNAPSHOT_RETENTION_DAYS
 
 
 def _parse_bool(value: str | None, default: bool) -> bool:
@@ -89,6 +98,27 @@ def _parse_csv(value: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
     if value is None or value.strip() == "":
         return default
     return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _parse_session(value: str | None) -> str:
+    session = (value or "").strip()
+    if session == "":
+        return DEFAULT_HERDR_SESSION
+    if session.casefold() == "default":
+        return "default"
+    return session
+
+
+def _parse_retention_days(value: str | None) -> int:
+    days = _parse_int(value, DEFAULT_SNAPSHOT_RETENTION_DAYS)
+    return days if days >= 1 else DEFAULT_SNAPSHOT_RETENTION_DAYS
+
+
+def _parse_db_path(env: dict[str, str]) -> str:
+    """Blank ``DB_PATH`` disables persistence; a missing key uses the default."""
+    if "DB_PATH" not in env:
+        return DEFAULT_DB_PATH
+    return env["DB_PATH"].strip()
 
 
 def load_settings(environ: dict[str, str] | None = None) -> Settings:
@@ -138,6 +168,13 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
         mem_crit=_parse_float(env.get("MEM_CRIT"), 90.0),
         disk_warn=_parse_float(env.get("DISK_WARN"), 75.0),
         disk_crit=_parse_float(env.get("DISK_CRIT"), 90.0),
+        herdr_session=_parse_session(env.get("HERDR_SESSION")),
+        chat_api_token=env.get("CHAT_API_TOKEN", "").strip(),
+        chat_cwd_allowlist=_parse_csv(env.get("CHAT_CWD_ALLOWLIST"), ()),
+        db_path=_parse_db_path(env),
+        herdr_snapshot_retention_days=_parse_retention_days(
+            env.get("HERDR_SNAPSHOT_RETENTION_DAYS")
+        ),
     )
 
 

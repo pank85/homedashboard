@@ -8,6 +8,14 @@ services:
     env_file:
       - path: .env
         required: false
+    # Safe defaults for the round-2 keys, overridable from the shell or .env.
+    # CHAT_API_TOKEN and CHAT_CWD_ALLOWLIST are deliberately absent: an empty
+    # interpolation here would override the value from env_file. They ride
+    # env_file only.
+    environment:
+      HERDR_SESSION: ${HERDR_SESSION:-hermes}
+      DB_PATH: ${DB_PATH:-/data/dashboard.db}
+      HERDR_SNAPSHOT_RETENTION_DAYS: ${HERDR_SNAPSHOT_RETENTION_DAYS:-7}
     # PID namespace: default is the container namespace. The FR2 process scan
     # then sees only this container's processes. Host CPU/RAM from /proc/stat
     # and /proc/meminfo are still host-wide. Opt in only if you accept the
@@ -17,3 +25,9 @@ services:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ${HOST_ROOT_SOURCE:-/}:/host:ro
       - ${HERDR_CONFIG_SOURCE:-./docker/empty-herdr}:/herdr-config:ro
+      # Host herdr config at herdr's default path. This image runs as root, so the
+      # default path inside the container is /root/.config/herdr. Leave commented
+      # if you have no herdr; the empty /herdr-config mount above still works.
+      # - ${HERDR_HOST_CONFIG_SOURCE}:/root/.config/herdr:ro
+      # SQLite bind. Leave commented to keep an ephemeral /data (sessions die with the container).
+      # - ${DASHBOARD_DATA_SOURCE}:/data

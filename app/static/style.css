@@ -99,3 +99,102 @@ p {
     min-height: 44px;
   }
 }
+
+.container-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+.container-card,
+.session-card {
+  background: #0f1419;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.badge {
+  display: inline-block;
+  margin: 0 0.35rem 0.5rem 0;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #0f1419;
+  font-weight: 700;
+}
+
+.badge.state-running,
+.badge.health-healthy {
+  color: #3dd68c;
+}
+
+.badge.state-exited,
+.badge.state-restarting,
+.badge.health-unhealthy {
+  color: #f07178;
+}
+
+.badge.state-paused,
+.badge.state-created,
+.badge.health-none {
+  color: #e6b35a;
+}
+
+.meter {
+  height: 0.55rem;
+  margin: 0 0 0.5rem;
+  background: #0f1419;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  max-width: 100%;
+  background: #3d7ea6;
+}
+
+.filters,
+#new-session-form,
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filters input,
+.filters select,
+#new-session-form input,
+#new-session-form select,
+#new-session-form button,
+.session-card input,
+.session-card button {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  font: inherit;
+  color: #e7ecf1;
+  background: #0f1419;
+  border: 1px solid #3d7ea6;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+
+#new-session-form button,
+.session-card button {
+  background: #3d7ea6;
+  font-weight: 700;
+}
+
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.55;
+}
+
+@media (min-width: 641px) {
+  .container-grid {
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  }
+}
