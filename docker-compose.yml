@@ -1,0 +1,19 @@
+services:
+  dashboard:
+    build: .
+    image: homedashboard:local
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PUBLISH_PORT:-8080}:8080"
+    env_file:
+      - path: .env
+        required: false
+    # PID namespace: default is the container namespace. The FR2 process scan
+    # then sees only this container's processes. Host CPU/RAM from /proc/stat
+    # and /proc/meminfo are still host-wide. Opt in only if you accept the
+    # privilege (uncomment next line):
+    # pid: "host"
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ${HOST_ROOT_SOURCE:-/}:/host:ro
+      - ${HERDR_CONFIG_SOURCE:-./docker/empty-herdr}:/herdr-config:ro

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-refresh="{{ refresh_seconds }}">
+  <header>
+    <h1>Dashboard</h1>
+    <p class="updated">Last updated <time id="last-updated">{{ generated_at }}</time></p>
+    <div class="herdr-launch">
+      {% if herdr.href %}
+      <a id="herdr-button" href="{{ herdr.href }}" target="_blank" rel="noopener noreferrer">Open Herdr Web</a>
+      {% else %}
+      <button id="herdr-button" type="button" disabled>Open Herdr Web</button>
+      <p>Herdr Web URL not configured</p>
+      {% endif %}
+    </div>
+  </header>
+
+  <main>
+    <section id="panel-containers">
+      <h2>Containers</h2>
+      <div id="containers-body">
+        {% if not containers.available %}
+        <p>unavailable: {{ containers.reason }}</p>
+        {% elif not containers.containers %}
+        <p>No containers.</p>
+        {% else %}
+        {% for row in containers.containers %}
+        <article>
+          <h3>{{ row.name }}</h3>
+          <p>{{ row.image }}</p>
+          <p>{{ row.state }}{% if row.health %} · {{ row.health }}{% endif %}</p>
+          <p>uptime {{ row.uptime_seconds }}</p>
+          <p>restarts {{ row.restart_count }}</p>
+          <p>cpu {{ row.cpu_percent }}</p>
+          <p>memory {{ row.memory_used_bytes }} / {{ row.memory_limit_bytes }}</p>
+        </article>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </section>
+
+    <section id="panel-agents">
+      <h2>Agents</h2>
+      <div id="agents-body">
+        {% for source in agents.sources %}
+        <p>source {{ source.name }} used {{ "true" if source.used else "false" }} refreshed_at {{ source.refreshed_at }}{% if source.error %} error {{ source.error }}{% endif %}</p>
+        {% endfor %}
+        {% if agents.note %}
+        <p>{{ agents.note }}</p>
+        {% endif %}
+        {% for agent in agents.agents %}
+        <article>
+          <h3>{{ agent.label }}</h3>
+          <p>{{ agent.status }}</p>
+          <p>{{ agent.cwd }}</p>
+          <p>{{ agent.source }}</p>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="panel-host">
+      <h2>Host</h2>
+      <div id="host-body">
+        <p>{{ host.view }}</p>
+        {% if not host.available and host.reason %}
+        <p>unavailable: {{ host.reason }}</p>
+        {% endif %}
+        {% if host.cpu.available %}
+        <p class="{% if host.cpu.level %}level-{{ host.cpu.level }}{% endif %}">CPU {{ host.cpu.percent }} cores {{ host.cpu.cores }} load {{ host.cpu.loadavg }}</p>
+        {% else %}
+        <p>unavailable: {{ host.cpu.reason }}</p>
+        {% endif %}
+        {% if host.memory.available %}
+        <p class="{% if host.memory.level %}level-{{ host.memory.level }}{% endif %}">RAM {{ host.memory.used_bytes }} / {{ host.memory.total_bytes }} {{ host.memory.percent }}</p>
+        {% else %}
+        <p>unavailable: {{ host.memory.reason }}</p>
+        {% endif %}
+        {% for disk in host.disks %}
+        {% if disk.available %}
+        <p class="{% if disk.level %}level-{{ disk.level }}{% endif %}">disk {{ disk.path }} {{ disk.percent }}</p>
+        {% else %}
+        <p>unavailable: {{ disk.reason }}</p>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <section id="herdr-frame">
+    <p>If the frame is blank, the upstream refused to be embedded (X-Frame-Options or frame-ancestors). Accept the self-signed or self-hosted origin in a new tab, or use the proxied /herdr/ path.</p>
+    <p>The proxied /herdr/ path strips upstream X-Frame-Options and Content-Security-Policy so the dashboard iframe and path shim can run. Service workers are not supported through the proxy. A direct external embed can still be blank.</p>
+    {% if herdr.embed %}
+    <iframe id="herdr-embed" src="{{ herdr.embed_src }}" title="Herdr Web"></iframe>
+    {% endif %}
+  </section>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

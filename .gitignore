@@ -1,0 +1,16 @@
+# ergo run scratch (never committed)
+.orchestration/
+
+# secrets
+.env
+
+# python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# logs
+*.log

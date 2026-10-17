@@ -1,0 +1,101 @@
+html {
+  color-scheme: dark;
+  background: #0f1419;
+  color: #e7ecf1;
+}
+
+body {
+  margin: 0;
+  background: #0f1419;
+  color: #e7ecf1;
+  font: 16px/1.45 system-ui, sans-serif;
+  padding: 1rem;
+}
+
+header,
+main,
+section {
+  width: 100%;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+section {
+  background: #1a2332;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0 0 0.5rem;
+}
+
+#herdr-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.6rem 1rem;
+  border: 0;
+  border-radius: 8px;
+  background: #3d7ea6;
+  color: #e7ecf1;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+#herdr-button:disabled {
+  opacity: 0.55;
+}
+
+#herdr-embed {
+  display: block;
+  width: 100%;
+  min-height: 24rem;
+  border: 0;
+  background: #0f1419;
+}
+
+.level-ok {
+  color: #3dd68c;
+}
+
+.level-warn {
+  color: #e6b35a;
+}
+
+.level-crit {
+  color: #f07178;
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 16px;
+  }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  section,
+  header,
+  .herdr-launch,
+  #herdr-button {
+    width: 100%;
+  }
+
+  #herdr-button {
+    min-height: 44px;
+  }
+}

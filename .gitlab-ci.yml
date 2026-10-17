@@ -1,0 +1,30 @@
+# GitLab CE + gitlab-runner. No paid features.
+# Assumes the docker executor can run a privileged dind service.
+# Shell executor alternative: comment out image and services and run the
+# same script on a runner that already has a docker CLI. Registry inputs
+# stay the CI variables below. Do not hardcode a registry host.
+
+stages:
+  - build
+
+variables:
+  DOCKER_TLS_CERTDIR: "/certs"
+
+build-image:
+  stage: build
+  image: docker:27.0.3
+  services:
+    - name: docker:27.0.3-dind
+      alias: docker
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
+        docker tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE:latest"
+        docker push "$CI_REGISTRY_IMAGE:latest"
+      fi

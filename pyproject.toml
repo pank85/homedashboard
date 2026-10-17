@@ -1,0 +1,9 @@
+[project]
+name = "homedashboard"
+version = "0.1.0"
+description = "Single-container dashboard for containers, agents, and host resources"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
