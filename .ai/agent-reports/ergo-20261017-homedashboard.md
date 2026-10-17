@@ -79,3 +79,26 @@ agent; the orchestrator landed one commit.
 - Disk percentage follows the spec formula `used = total - f_bfree` over `total`, so it reads a few
   points below `df`'s `Use%` (which divides by `used + avail`). Same numbers, different denominator.
 - v1 is read-only: no container start/stop/restart, no log streaming, no auth.
+
+## CI: what it took to get the image built (instance-specific)
+
+The first three pipelines failed before any code ran. Root cause and fix, for the next
+project on this instance:
+
+1. The instance advertises the registry as `$CI_REGISTRY=dockerhub.pkatopodis.me:5050`
+   over **plain HTTP**, and a dind service starts with no insecure registries, so
+   `docker login $CI_REGISTRY` died with `http: server gave HTTP response to HTTPS client`.
+2. Three attempts that do **not** work on this runner:
+   - `--insecure-registry=gitlab-ce:5050` — the client asks for a different host string.
+   - `--insecure-registry=$CI_REGISTRY` — GitLab CI does not expand variables inside a
+     service `command`, so the literal `$CI_REGISTRY` was passed and ignored.
+   - a literal `--insecure-registry=dockerhub.pkatopodis.me:5050` — the service `command`
+     is not applied at all unless the entrypoint is also overridden.
+3. What works (copied from `pank85/GroceryMoneySaver-Web`, which builds on the same runner):
+   override `CI_REGISTRY` to the **bare host** `dockerhub.pkatopodis.me` (HTTPS 443 through
+   the reverse proxy), add `entrypoint: ["dockerd"]` next to `command:`, and set
+   `DOCKER_HOST: tcp://docker:2375` with `DOCKER_TLS_CERTDIR: ""`.
+
+Result: pipeline #1751 green; registry repository `pank85/homedashboard` (id 7) holds both
+`<commit-sha>` and `latest`. Verified through the API, not from the job status.
+
