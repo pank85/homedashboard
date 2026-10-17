@@ -1,8 +1,14 @@
-# GitLab CE + gitlab-runner. No paid features.
-# Assumes the docker executor can run a privileged dind service.
-# Shell executor alternative: comment out image and services and run the
-# same script on a runner that already has a docker CLI. Registry inputs
-# stay the CI variables below. Do not hardcode a registry host.
+# GitLab CE + gitlab-runner (docker executor, privileged dind). No paid features.
+#
+# Self-hosted instances frequently serve the container registry over plain HTTP
+# (registry_external_url without TLS), and a dind service has no insecure registries
+# by default, so `docker login` fails with "http: server gave HTTP response to HTTPS
+# client". The flag below takes its value from GitLab's own $CI_REGISTRY, so no
+# registry host is hardcoded here: on an instance with an HTTPS registry it is
+# harmless, and it always matches whatever registry the instance advertises.
+#
+# Shell executor alternative: comment out image and services and run the same script
+# on a runner that already has a docker CLI. Registry inputs stay the CI variables.
 
 stages:
   - build
@@ -16,10 +22,11 @@ build-image:
   services:
     - name: docker:27.0.3-dind
       alias: docker
+      command: ["--insecure-registry=$CI_REGISTRY"]
   rules:
     - if: $CI_COMMIT_BRANCH
   before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
     - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" .
     - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
