@@ -1,42 +1,48 @@
-# GitLab CE + gitlab-runner (docker executor, privileged dind). No paid features.
+# GitLab CE + the shared gitlab-runner (docker executor, privileged dind).
 #
-# Self-hosted instances frequently serve the container registry over plain HTTP
-# (registry_external_url without TLS), and a dind service has no insecure registries
-# by default, so `docker login` fails with "http: server gave HTTP response to HTTPS
-# client". The flag below takes its value from GitLab's own $CI_REGISTRY, so no
-# registry host is hardcoded here: on an instance with an HTTPS registry it is
-# harmless, and it always matches whatever registry the instance advertises.
+# This mirrors the pattern already proven on this instance by
+# pank85/GroceryMoneySaver-Web, because the default shape does not work here:
 #
-# Shell executor alternative: comment out image and services and run the same script
-# on a runner that already has a docker CLI. Registry inputs stay the CI variables.
+#   * The instance advertises the registry as plain HTTP on <host>:5050, and a dind
+#     daemon starts with no insecure registries, so `docker login $CI_REGISTRY` fails
+#     with "http: server gave HTTP response to HTTPS client". The registry is also
+#     reachable over HTTPS on the bare host, so CI_REGISTRY is overridden to that.
+#   * A service `command:` alone is not enough on this runner: dind also needs an
+#     explicit `entrypoint: ["dockerd"]`, otherwise the arguments are not applied.
+#   * DOCKER_HOST + DOCKER_TLS_CERTDIR="" skip the certificate dance.
+#
+# The image path is derived from CI_PROJECT_PATH, so the only instance-shaped value is
+# the registry host. On an instance with an HTTPS registry, drop the CI_REGISTRY
+# override and the dind entrypoint/command and this file works unchanged.
 
 stages:
   - build
 
 variables:
-  DOCKER_TLS_CERTDIR: "/certs"
-  # A dind service starts with no insecure registries, and GitLab CI does not expand
-  # variables inside a service `command`, so this value has to be literal. Change it
-  # if your instance advertises a different registry, or delete the `command:` line
-  # when your registry is served over HTTPS.
-  REGISTRY_INSECURE_HOST: "dockerhub.pkatopodis.me:5050"
+  CI_REGISTRY: "dockerhub.pkatopodis.me"
+  DOCKER_TLS_CERTDIR: ""
 
 build-image:
   stage: build
-  image: docker:27.0.3
+  image: docker:27.5.1-cli
   services:
-    - name: docker:27.0.3-dind
+    - name: docker:27.5.1-dind
       alias: docker
-      command: ["--insecure-registry=dockerhub.pkatopodis.me:5050"]
+      entrypoint: ["dockerd"]
+      command: ["--host=tcp://0.0.0.0:2375", "--insecure-registry=gitlab-ce:5050"]
+  variables:
+    DOCKER_HOST: tcp://docker:2375
   rules:
     - if: $CI_COMMIT_BRANCH
   before_script:
-    - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - until docker info; do sleep 1; done
+    - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
   script:
-    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" .
-    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+    - IMAGE="$CI_REGISTRY/$CI_PROJECT_PATH"
+    - docker build --pull -t "$IMAGE:$CI_COMMIT_SHA" .
+    - docker push "$IMAGE:$CI_COMMIT_SHA"
     - |
       if [ "$CI_COMMIT_BRANCH" = "$CI_DEFAULT_BRANCH" ]; then
-        docker tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE:latest"
-        docker push "$CI_REGISTRY_IMAGE:latest"
+        docker tag "$IMAGE:$CI_COMMIT_SHA" "$IMAGE:latest"
+        docker push "$IMAGE:latest"
       fi
