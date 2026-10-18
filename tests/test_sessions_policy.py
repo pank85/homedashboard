@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import hmac
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from app.sessions_policy import (
     AGENT_START_SUBPROCESS_TIMEOUT,
     AGENT_START_TIMEOUT_MS,
     PolicyError,
+    agent_name_from_label,
     agent_start_argv,
     attach_command,
     display_argv,
@@ -170,6 +172,43 @@ def test_label_accepts_safe_punctuation():
     assert validate_label("My Label", kind="pi") == "My Label"
     assert validate_label("a.b_c", kind="pi") == "a.b_c"
     assert validate_label("a" + "b" * 63, kind="pi") == "a" + "b" * 63
+
+
+def test_label_accepts_unicode_letters_verbatim():
+    label = "Hermes Probe \u30bb\u30c3\u30b7\u30e7\u30f3"
+    assert validate_label(label, kind="hermes") == label
+    assert validate_label("\u30bb\u30c3\u30b7\u30e7\u30f3", kind="hermes") == "\u30bb\u30c3\u30b7\u30e7\u30f3"
+    assert validate_label("\u30bb" * 64, kind="hermes") == "\u30bb" * 64
+
+
+@pytest.mark.parametrize("label", ["ok\U0001f600", "Hermes;\u30bb\u30c3\u30b7\u30e7\u30f3", "\u30bb" * 65])
+def test_label_rejects_non_letters_and_overlong_unicode(label: str):
+    with pytest.raises(PolicyError) as exc:
+        validate_label(label, kind="pi")
+    assert exc.value.reason == "invalid label"
+
+
+def test_agent_name_from_label_slugifies_probe_session():
+    assert agent_name_from_label("hermes probe session", kind="hermes") == "hermes-probe-session"
+
+
+def test_agent_name_from_label_drops_case_spaces_and_unicode():
+    label = "Hermes Probe \u30bb\u30c3\u30b7\u30e7\u30f3"
+    name = agent_name_from_label(label, kind="hermes")
+    assert re.fullmatch(r"[a-z][a-z0-9-]{0,31}", name)
+    assert name != label
+    assert name == "hermes-probe"
+    assert agent_name_from_label("A.B_C", kind="pi") == "a-b-c"
+    assert agent_name_from_label("a" * 40, kind="pi") == "a" * 32
+
+
+def test_agent_name_from_label_falls_back_when_slug_unusable():
+    now = datetime(2026, 10, 17, 22, 39, 27, tzinfo=timezone.utc)
+    assert agent_name_from_label("", kind="pi", now=now) == "pi-20261017223927"
+    assert agent_name_from_label("\u30bb\u30c3\u30b7\u30e7\u30f3", kind="hermes", now=now) == validate_label(
+        None, kind="hermes", now=now
+    )
+    assert agent_name_from_label("123 session", kind="claude", now=now) == "claude-20261017223927"
 
 
 def test_cwd_empty_allowlist_does_not_require_a_path(tmp_path: Path):
@@ -341,6 +380,13 @@ def test_agent_start_argv_exact():
     assert "--" not in argv
     assert "shell" not in argv
     assert AGENT_START_SUBPROCESS_TIMEOUT == 45.0
+
+
+@pytest.mark.parametrize("name", ["Hermes Probe", "hermes probe session", "1demo", "has_underscore", "a" * 33])
+def test_agent_start_argv_rejects_unsafe_name(name: str):
+    with pytest.raises(PolicyError) as exc:
+        agent_start_argv("herdr", "hermes", name, "hermes", "wC:p1")
+    assert exc.value.reason == "invalid agent name"
 
 
 def test_attach_command_hermes():

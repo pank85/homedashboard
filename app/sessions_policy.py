@@ -40,6 +40,7 @@ AGENT_START_KINDS: tuple[str, ...] = (
 )
 
 LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$")
+_AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 SESSION_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 PANE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$")
 SESSION_ID_RE = re.compile(r"^[a-f0-9]{32}$")
@@ -99,9 +100,19 @@ def validate_label(label: str | None, *, kind: str, now: datetime | None = None)
     if label is None or label.strip() == "":
         moment = _as_utc(now)
         return f"{kind}-{moment.strftime('%Y%m%d%H%M%S')}"
-    if LABEL_RE.fullmatch(label) is None:
+    if not _label_charset_ok(label):
         raise PolicyError("invalid label")
     return label
+
+
+def agent_name_from_label(label: str, *, kind: str, now: datetime | None = None) -> str:
+    """Return a herdr-safe agent name. The human label is not rewritten."""
+    mapped = label.lower().replace(" ", "-").replace("_", "-").replace(".", "-")
+    slug = re.sub(r"[^a-z0-9-]", "", mapped)
+    slug = re.sub(r"-{2,}", "-", slug).strip("-")[:32]
+    if _AGENT_NAME_RE.fullmatch(slug) is None:
+        return f"{kind}-{_as_utc(now).strftime('%Y%m%d%H%M%S')}"
+    return slug
 
 
 def validate_cwd(cwd: str, allowlist: tuple[str, ...]) -> str:
@@ -168,6 +179,8 @@ def workspace_create_argv(bin: str, session: str, cwd: str, label: str) -> list[
 
 
 def agent_start_argv(bin: str, session: str, name: str, kind: str, pane_id: str) -> list[str]:
+    if _AGENT_NAME_RE.fullmatch(name) is None:
+        raise PolicyError("invalid agent name")
     return [
         bin,
         "--session",
@@ -220,6 +233,24 @@ def _credential(authorization: str | None, form_token: str | None) -> str:
     if len(parts) != 2 or parts[0].lower() != "bearer":
         return ""
     return parts[1]
+
+
+def _label_charset_ok(label: str) -> bool:
+    """Historical ASCII labels, plus Unicode letters stored verbatim."""
+    if LABEL_RE.fullmatch(label) is not None:
+        return True
+    if len(label) == 0 or len(label) > 64:
+        return False
+    for index, char in enumerate(label):
+        if char.isascii():
+            if index == 0:
+                if not char.isalnum():
+                    return False
+            elif not (char.isalnum() or char in " _.-"):
+                return False
+        elif not char.isalpha():
+            return False
+    return True
 
 
 def _as_utc(now: datetime | None) -> datetime:

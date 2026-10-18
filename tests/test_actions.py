@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -272,6 +273,43 @@ def test_create_lists_session_on_sessions_and_metrics(tmp_path: Path, via: str):
     assert SECRET not in listed.text
     assert SECRET not in metrics.text
     assert SECRET not in page.text
+
+
+def test_create_stores_human_label_and_starts_slug_agent_name(tmp_path: Path):
+    calls: list = []
+    application, settings, work = _app(tmp_path, _success(calls))
+    label = "Hermes Probe \u30bb\u30c3\u30b7\u30e7\u30f3"
+    expected_cwd = str(work.resolve())
+    with TestClient(application) as client:
+        created = client.post(
+            "/api/sessions",
+            headers=_auth(),
+            json=_body(work, kind="hermes", label=label),
+        )
+    assert created.status_code == 201
+    session = created.json()["session"]
+    assert session["label"] == label
+    assert calls[0] == (
+        workspace_create_argv(settings.herdr_bin, "hermes", expected_cwd, label),
+        settings.herdr_timeout_seconds,
+    )
+    start_argv, start_timeout = calls[1]
+    agent_name = start_argv[5]
+    assert start_timeout == AGENT_START_SUBPROCESS_TIMEOUT
+    assert re.fullmatch(r"[a-z][a-z0-9-]{0,31}", agent_name)
+    assert agent_name != label
+    assert session["agent_name"] == agent_name
+    assert start_argv == agent_start_argv(
+        settings.herdr_bin,
+        "hermes",
+        agent_name,
+        "hermes",
+        "pane1",
+    )
+    conn = sqlite3.connect(settings.db_path)
+    stored = conn.execute("SELECT label, agent_name FROM chat_sessions").fetchone()
+    conn.close()
+    assert stored == (label, agent_name)
 
 
 @pytest.mark.parametrize(

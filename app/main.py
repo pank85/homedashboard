@@ -254,6 +254,7 @@ def create_app(
         AGENT_START_KINDS,
         AGENT_START_SUBPROCESS_TIMEOUT,
         PolicyError,
+        agent_name_from_label,
         agent_start_argv,
         attach_command,
         display_argv,
@@ -745,6 +746,7 @@ def create_app(
             session_name = validate_session_name(settings.herdr_session)
             kind = validate_kind(kind_arg(fields.get("kind")))
             label = validate_label(label_arg(fields.get("label")), kind=kind)
+            agent_name = agent_name_from_label(label, kind=kind)
             cwd = validate_cwd(
                 cwd_arg(fields.get("cwd")),
                 settings.chat_cwd_allowlist,
@@ -783,7 +785,7 @@ def create_app(
         start_argv = agent_start_argv(
             settings.herdr_bin,
             session_name,
-            label,
+            agent_name,
             kind,
             created["pane_id"],
         )
@@ -801,7 +803,7 @@ def create_app(
                 workspace_id=created["workspace_id"],
                 tab_id=created["tab_id"],
                 pane_id=created["pane_id"],
-                agent_name=label,
+                agent_name=agent_name,
             )
         except Exception:
             _LOGGER.exception("mark_running failed")
