@@ -51,19 +51,6 @@
     });
   }
 
-  function sessionsForKey(payload, key) {
-    if (!key) {
-      return [];
-    }
-    return list(payload, "sessions").filter(function (row) {
-      if (!row || typeof row !== "object") {
-        return false;
-      }
-      var kind = typeof row.agent_kind === "string" ? row.agent_kind.toLowerCase() : "";
-      return /^[a-z][a-z0-9-]{0,31}$/.test(kind) && kind === key;
-    });
-  }
-
   function primaryRow(rows) {
     if (!rows.length) {
       return {};
@@ -92,10 +79,9 @@
     return "";
   }
 
-  function render(page, agentsPayload, sessionsPayload) {
+  function render(page, agentsPayload) {
     var key = page ? page.getAttribute("data-agent-key") : "";
     var rows = rowsForKey(agentsPayload, key);
-    var sessions = sessionsForKey(sessionsPayload, key);
     var primary = primaryRow(rows);
     var heading = document.getElementById("agent-heading");
     if (heading) {
@@ -117,32 +103,8 @@
     }
     var running = document.getElementById("agent-running");
     if (running) {
-      var signal = runningSignal(rows, sessions);
+      var signal = runningSignal(rows, []);
       running.textContent = signal === "session" ? "running" : signal === "agent" ? "live" : "";
-    }
-    var chats = document.getElementById("agent-chats");
-    if (chats) {
-      clear(chats);
-      add(chats, "h2", "Chats");
-      if (!sessions.length) {
-        add(chats, "p", "No chats for this agent.", "agent-empty");
-      }
-      sessions.forEach(function (row) {
-        var card = add(chats, "article", null, "session-card");
-        add(card, "h3", human(row.label));
-        add(
-          card,
-          "p",
-          "agent " + human(row.agent_kind)
-            + " · workspace " + human(row.workspace_id)
-            + " · status " + human(row.status)
-            + " · cwd " + human(row.cwd),
-          "session-meta"
-        );
-        if (row.updated_relative) {
-          add(card, "p", "updated " + human(row.updated_relative), "session-updated");
-        }
-      });
     }
   }
 
@@ -162,11 +124,9 @@
     if (!page) {
       return;
     }
-    Promise.all([readJson("/api/agents"), readJson("/api/sessions")]).then(
-      function (results) {
-        render(page, results[0], results[1]);
-      }
-    );
+    readJson("/api/agents").then(function (agentsPayload) {
+      render(page, agentsPayload);
+    });
   }
 
   function start() {

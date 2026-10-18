@@ -1,18 +1,18 @@
 #panel-agents {
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
 }
 
 #panel-agents h2,
 #panel-agents h3,
 #panel-agents p {
-  color: #e7ecf1;
+  color: var(--tblr-body-color);
 }
 
 #panel-agents .herdr-summary,
 #panel-agents .agent-card {
-  background: #1a2332;
-  color: #e7ecf1;
+  background: var(--tblr-card-bg);
+  color: var(--tblr-body-color);
   border-radius: 8px;
   padding: 0.75rem;
 }
@@ -22,11 +22,11 @@
 }
 
 #panel-agents .herdr-reason {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 #panel-agents .herdr-unavailable {
-  color: #f07178;
+  color: var(--tblr-danger);
 }
 
 #panel-agents .workspace-group {
@@ -48,27 +48,27 @@
   display: inline-block;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
   font-weight: 700;
 }
 
 #panel-agents .badge.status-working,
 #panel-agents .badge.status-running,
 #panel-agents .badge.status-ok {
-  color: #3dd68c;
+  color: var(--tblr-success);
 }
 
 #panel-agents .badge.status-idle,
 #panel-agents .badge.status-unknown,
 #panel-agents .badge.status-paused {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 #panel-agents .badge.status-error,
 #panel-agents .badge.status-failed,
 #panel-agents .badge.status-exited {
-  color: #f07178;
+  color: var(--tblr-danger);
 }
 
 #panel-agents.agents-desktop .workspace-group {

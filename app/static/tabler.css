@@ -1,0 +1,77 @@
+/* Tabler dark tokens, MIT visual adaptation. Not a vendored Tabler build. */
+:root {
+  color-scheme: dark;
+  --tblr-font-sans: system-ui, sans-serif;
+  --tblr-primary: #206bc4;
+  --tblr-secondary: #626976;
+  --tblr-success: #2fb344;
+  --tblr-info: #4299e1;
+  --tblr-warning: #f76707;
+  --tblr-danger: #d63939;
+  --tblr-body-bg: #151f2c;
+  --tblr-body-color: #dce1e7;
+  --tblr-heading-color: #f8fafc;
+  --tblr-muted: #8b9bb4;
+  --tblr-border-color: #243049;
+  --tblr-card-bg: #1b293a;
+}
+
+html,
+body {
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
+  font-family: var(--tblr-font-sans);
+}
+
+.navbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--tblr-card-bg);
+  border: 1px solid var(--tblr-border-color);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.4375rem 1rem;
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--tblr-primary);
+  border: 1px solid var(--tblr-primary);
+  color: #ffffff;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+}
+
+section,
+.card {
+  background: var(--tblr-card-bg);
+  border: 1px solid var(--tblr-border-color);
+  border-radius: 4px;
+}
+
+.view-nav button[role="tab"] {
+  background: transparent;
+  color: var(--tblr-body-color);
+  border: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.view-nav button[role="tab"][aria-selected="true"] {
+  color: var(--tblr-primary);
+  border-bottom: 2px solid var(--tblr-primary);
+}

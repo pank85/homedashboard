@@ -1,18 +1,18 @@
 #panel-git {
-  background: #1a2332;
-  color: #e7ecf1;
+  background: var(--tblr-card-bg);
+  color: var(--tblr-body-color);
 }
 
 #panel-git h2,
 #panel-git h3,
 #panel-git p {
-  color: #e7ecf1;
+  color: var(--tblr-body-color);
 }
 
 #panel-git .git-row,
 #panel-git .git-card {
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
   border-radius: 8px;
   padding: 0.75rem;
 }
@@ -34,18 +34,18 @@
 }
 
 #panel-git .git-branch {
-  color: #3dd68c;
+  color: var(--tblr-success);
 }
 
 #panel-git .git-detached,
 #panel-git .git-unavailable {
-  color: #f07178;
+  color: var(--tblr-danger);
 }
 
 #panel-git .git-status,
 #panel-git .git-truncated,
 #panel-git .badge.git-badge {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 #panel-git .badge.git-badge {
@@ -53,7 +53,7 @@
   margin: 0 0.35rem 0.35rem 0;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: #1a2332;
+  background: var(--tblr-card-bg);
   font-weight: 700;
 }
 
@@ -61,7 +61,7 @@
   min-height: 44px;
   display: flex;
   align-items: center;
-  color: #e7ecf1;
+  color: var(--tblr-body-color);
 }
 
 #panel-git.git-mobile .git-card {

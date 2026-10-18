@@ -153,18 +153,15 @@ def test_app_js_sets_data_view_and_rerenders_on_change() -> None:
 def test_tick_uses_optional_view_hooks() -> None:
     source = _read(APP_JS)
     assert 'typeof globalThis.renderHostView === "function"' in source
-    assert 'typeof globalThis.renderSessionsView === "function"' in source
     assert "renderHostView(document.getElementById(\"host-body\"), data.host, data.containers, data.agents)" in source
-    assert "renderSessionsView(data.sessions)" in source
     assert "renderHost(data.host)" in source
-    assert "renderSessions(data.sessions)" in source
 
 
 def test_view_renderers_are_defined_and_inert() -> None:
     # p2-host-ui and p3-sessions replaced the comment-only stubs with real
     # renderers; the contract now is that they define their global hook and
     # build DOM only (no network, no URLs, no innerHTML strings).
-    for stub, name in ((HOST_VIEW_JS, "renderHostView"), (SESSIONS_VIEW_JS, "renderSessionsView")):
+    for stub, name in ((HOST_VIEW_JS, "renderHostView"),):
         source = _read(stub)
         assert ("function " + name) in source or (name + " = function") in source or (
             name + " ="
@@ -186,25 +183,22 @@ def test_index_links_view_assets_before_app_js() -> None:
         "/static/mobile.css",
         "/static/view_nav.js",
         "/static/host_view.js",
-        "/static/sessions_view.js",
     ):
         assert href in source
     for src in (
         "/static/view_nav.js",
         "/static/host_view.js",
-        "/static/sessions_view.js",
         "/static/app.js",
     ):
         assert src in source
     assert source.index('src="/static/view_nav.js"') < source.index('src="/static/host_view.js"')
-    assert source.index('src="/static/host_view.js"') < source.index('src="/static/sessions_view.js"')
-    assert source.index('src="/static/sessions_view.js"') < source.index('src="/static/app.js"')
+    assert source.index('src="/static/host_view.js"') < source.index('src="/static/app.js"')
 
 
 def test_index_view_chrome_has_tabs_and_burger() -> None:
     source = _read(INDEX_HTML)
     assert 'role="tablist"' in source
-    assert source.count('role="tab"') == 5
+    assert source.count('role="tab"') == 4
     assert 'data-burger' in source
     assert 'id="view-menu"' in source
     assert 'data-menu-open' in source
@@ -215,7 +209,6 @@ def test_index_view_chrome_has_tabs_and_burger() -> None:
         "containers",
         "agents",
         "git",
-        "sessions",
     ]
     assert 'href="/m"' not in source
     assert 'href="/"' not in source
@@ -229,12 +222,6 @@ def test_partial_panels_carry_view_chrome_attributes() -> None:
     assert 'data-mobile-panel' in host_panel.group(0)
     assert 'data-section="host"' in host_panel.group(0)
     assert "hidden" not in host_panel.group(0)
-    sessions_partial = _read(SESSIONS_PARTIAL)
-    sessions_panel = re.search(r'<section id="panel-sessions"[^>]*>', sessions_partial)
-    assert sessions_panel is not None
-    assert 'data-mobile-panel' in sessions_panel.group(0)
-    assert 'data-section="sessions"' in sessions_panel.group(0)
-    assert "hidden" in sessions_panel.group(0)
     index_source = _read(INDEX_HTML)
     for section in ("containers", "agents", "git"):
         wrapper = re.search(r'<div[^>]*data-mobile-panel[^>]*data-section="' + section + r'"[^>]*>', index_source)

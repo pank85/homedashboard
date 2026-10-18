@@ -122,6 +122,14 @@
     add(badges, "span", human(agent.kind), "badge badge-kind kind-" + human(agent.kind));
     var workspace = agent.workspace_label ? agent.workspace_label : groupTitle(agent);
     add(body, "p", "workspace " + workspace + " · cwd " + human(agent.cwd), "agent-meta");
+    if (agent.source === "config") {
+      add(
+        body,
+        "p",
+        "config " + human(agent.config_path) + " · " + (agent.config_present ? "present" : "absent") + " · model " + human(agent.model),
+        "agent-config"
+      );
+    }
     if (agent.elapsed_source === "herdr") {
       add(body, "p", "elapsed " + human(agent.elapsed_human), "agent-elapsed");
     }

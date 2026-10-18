@@ -1,5 +1,5 @@
 (function () {
-  var SECTIONS = ["host", "containers", "agents", "git", "sessions"];
+  var SECTIONS = ["host", "containers", "agents", "git"];
 
   function activate(section) {
     var panels = document.querySelectorAll("[data-mobile-panel]");

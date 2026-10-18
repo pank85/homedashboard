@@ -1,6 +1,6 @@
 .agent-page {
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
   margin: 0 auto;
   max-width: 60rem;
   padding: 1rem;
@@ -9,7 +9,7 @@
 .agent-back {
   display: inline-block;
   margin: 0 0 1rem;
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 .agent-heading {
@@ -28,27 +28,27 @@
   display: inline-block;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: #1a2332;
-  color: #e7ecf1;
+  background: var(--tblr-card-bg);
+  color: var(--tblr-body-color);
   font-weight: 700;
 }
 
 .agent-badges .badge.status-working,
 .agent-badges .badge.status-running,
 .agent-badges .badge.badge-running {
-  color: #3dd68c;
+  color: var(--tblr-success);
 }
 
 .agent-badges .badge.status-idle,
 .agent-badges .badge.status-unknown,
 .agent-badges .badge.badge-live {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 .agent-badges .badge.status-error,
 .agent-badges .badge.status-failed,
 .agent-badges .badge.status-exited {
-  color: #f07178;
+  color: var(--tblr-danger);
 }
 
 .agent-detail {
@@ -64,8 +64,8 @@
 }
 
 .agent-chats .session-card {
-  background: #1a2332;
-  color: #e7ecf1;
+  background: var(--tblr-card-bg);
+  color: var(--tblr-body-color);
   border-radius: 8px;
   padding: 0.75rem;
   margin: 0 0 0.75rem;
@@ -81,10 +81,10 @@
 }
 
 .agent-empty {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 .agent-blocked {
-  color: #f07178;
+  color: var(--tblr-danger);
   margin: 0;
 }

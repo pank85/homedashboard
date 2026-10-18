@@ -319,15 +319,12 @@ def test_agent_route_404_for_invalid_identity_key(monkeypatch, tmp_path):
 
 
 def test_agent_route_shows_only_matching_chat_rows(monkeypatch, tmp_path):
-    db_path = tmp_path / "dash.db"
     application = _app(monkeypatch, tmp_path, _agents_payload())
-    _insert_session(str(db_path), agent_kind="pi", status="running", label="one", workspace_id="ws-1", cwd="/work")
-    _insert_session(str(db_path), agent_kind="claude", status="running", label="two", workspace_id="ws-2", cwd="/tmp")
     with TestClient(application) as client:
         page = client.get("/agents/pi")
     assert page.status_code == 200
-    assert ">one</h3>" in page.text
-    assert ">two</h3>" not in page.text
+    assert 'id="agent-chats"' not in page.text
+    assert "Skills, commands, crons, and markdown are not available. No on-disk source is configured." in page.text
 
 
 def test_agent_route_page_has_no_file_writing_form(monkeypatch, tmp_path):

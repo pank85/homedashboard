@@ -381,32 +381,16 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert 'id="agents-body"' in page.text
         assert 'id="panel-host"' in page.text
         assert 'id="host-body"' in page.text
-        assert 'id="panel-sessions"' in page.text
-        assert 'id="sessions-body"' in page.text
         assert 'id="herdr-block"' in page.text
         assert 'id="container-filter-text"' in page.text
         assert 'id="container-filter-state"' in page.text
         assert 'id="container-filter-hide-healthy"' in page.text
         assert 'id="container-filter-count"' in page.text
-        assert 'id="new-session-form"' in page.text
         assert 'src="/static/container_filters.js"' in page.text
         assert page.text.index('src="/static/container_filters.js"') < page.text.index('src="/static/app.js"')
-        assert (
-            "Archive only updates this dashboard. It does not stop or delete the herdr workspace, tab, or agent."
-            in page.text
-        )
-        warning = "herdr --session &lt;name&gt; attach is not a working command on herdr 0.9.5."
-        assert warning in page.text
-        assert page.text.replace(warning, "").count("herdr --session") == 0
         assert "undefined" not in page.text
-        assert "CHAT_API_TOKEN unset" in page.text
-        password = _tag(page.text, "session-token")
-        assert 'type="password"' in password
-        assert "value=" not in password
-        for panel_id in ("panel-containers", "panel-agents", "panel-host", "panel-sessions"):
+        for panel_id in ("panel-containers", "panel-agents", "panel-host"):
             assert "unavailable" in _panel(page.text, panel_id)
-        for control in ("session-kind", "session-cwd", "session-label", "session-token", "session-submit"):
-            assert "disabled" in _tag(page.text, control)
         agents_panel = _panel(page.text, "panel-agents")
         assert agents_panel.index('id="herdr-block"') < agents_panel.index('id="agents-body"')
         containers_panel = _panel(page.text, "panel-containers")
@@ -449,9 +433,6 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert "http://" not in style.text
         assert "innerHTML" not in script.text
         assert "filterContainers(" in script.text
-        assert "homedashboard.chatApiToken" in script.text
-        assert "/api/sessions" in script.text
-        assert "clipboard.writeText" in script.text
         filters = client.get("/static/container_filters.js")
         assert filters.status_code == 200
         assert "fetch(" not in filters.text
@@ -460,12 +441,14 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert "innerHTML" not in filters.text
         assert "@import" not in style.text
         assert "url(http" not in style.text
-        assert "#0f1419" in style.text
-        assert "#e7ecf1" in style.text
-        assert "#1a2332" in style.text
-        assert "#3dd68c" in style.text
-        assert "#e6b35a" in style.text
-        assert "#f07178" in style.text
+        assert "var(--tblr-body-bg)" in style.text
+        assert 'href="/static/tabler.css"' in page.text
+        tabler = client.get("/static/tabler.css")
+        assert tabler.status_code == 200
+        for token in ("#206bc4", "#151f2c", "#1b293a", "#2fb344", "#f76707", "#d63939"):
+            assert token in tabler.text
+        assert "http://" not in tabler.text
+        assert "https://" not in tabler.text
         assert "max-width: 640px" in style.text
         assert "grid-template-columns: 1fr" in style.text
         assert "repeat(auto-fill, minmax(16rem, 1fr))" in style.text
@@ -540,7 +523,10 @@ def test_page_real_collectors_missing_sources(monkeypatch, tmp_path):
         page = client.get("/")
     assert page.status_code == 200
     assert "unavailable:" in page.text
-    assert "No agents detected." in page.text
+    assert "Claude" in page.text
+    assert "Pi" in page.text
+    assert "OpenCode" in page.text
+    assert "Hermes" in page.text
     assert "Traceback" not in page.text
     assert "super-secret-token" not in page.text
     assert 'data-refresh="0"' in page.text
@@ -765,65 +751,8 @@ def _insert_session(path: str) -> None:
     conn.close()
 
 
-def test_sessions_form_disabled_without_token(monkeypatch, tmp_path):
-    db_path = tmp_path / "dash.db"
-    monkeypatch.setenv("DB_PATH", str(db_path))
-    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
-    monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
-    application = create_app(collectors=_unavailable_collectors())
-    _insert_session(str(db_path))
-    with TestClient(application) as client:
-        page = client.get("/")
-    assert page.status_code == 200
-    assert "CHAT_API_TOKEN unset" in page.text
-    assert "super-secret-token" not in page.text
-    for control in ("session-kind", "session-cwd", "session-label", "session-token", "session-submit"):
-        assert "disabled" in _tag(page.text, control)
-    password = _tag(page.text, "session-token")
-    assert 'type="password"' in password
-    assert "value=" not in password
-    archive = re.search(r'<button[^>]*class="archive-session"[^>]*>', page.text)
-    assert archive is not None
-    assert "disabled" in archive.group(0)
-    assert "herdr session attach hermes" in page.text
 
 
-def test_sessions_list_and_enabled_form(monkeypatch, tmp_path):
-    db_path = tmp_path / "dash.db"
-    monkeypatch.setenv("DB_PATH", str(db_path))
-    monkeypatch.setenv("CHAT_API_TOKEN", "session-secret")
-    monkeypatch.setenv("HERDR_WEB_TOKEN", "super-secret-token")
-    application = create_app(collectors=_unavailable_collectors())
-    _insert_session(str(db_path))
-    with TestClient(application) as client:
-        page = client.get("/")
-    assert page.status_code == 200
-    assert "session-secret" not in page.text
-    assert "super-secret-token" not in page.text
-    assert "undefined" not in page.text
-    panel = _panel(page.text, "panel-sessions")
-    assert "<p>Name demo</p>" in panel
-    assert "<p>Agent pi</p>" in panel
-    assert "<p>Workspace ws-1</p>" in panel
-    assert "<p>Status running</p>" in panel
-    assert "<p>Folder /work</p>" in panel
-    assert "ago" in panel
-    assert "Attaching that name opens the whole Herdr session, not this one chat." in panel
-    assert "Herdr session: hermes." in panel
-    assert "herdr session attach hermes" in panel
-    assert "Open Herdr Web" in panel
-    assert 'href="/herdr/"' in panel
-    submit = _tag(page.text, "session-submit")
-    assert "disabled" not in submit
-    password = _tag(page.text, "session-token")
-    assert "value=" not in password
-    archive = re.search(r'<button[^>]*class="archive-session"[^>]*>', page.text)
-    assert archive is not None
-    assert "disabled" not in archive.group(0)
-    from app.sessions_policy import AGENT_START_KINDS
-
-    for kind in AGENT_START_KINDS:
-        assert f'value="{kind}"' in panel
 
 
 def test_tick_render_path_reapplies_filters():
@@ -845,14 +774,6 @@ def test_tick_render_path_reapplies_filters():
     assert "innerHTML" not in source
     assert "http://" not in source
     assert "https://" not in source
-    create = _js_function(source, "onCreate")
-    assert "chatToken()" in create
-    assert create.index("if (typed)") < create.index(
-        'localStorage.setItem("homedashboard.chatApiToken", typed)'
-    )
-    assert 'setItem("homedashboard.chatApiToken", token)' not in create
-    assert 'setItem("homedashboard.chatApiToken", "")' not in create
-    assert "token=" not in create
     refresh = source.index('var raw = body.getAttribute("data-refresh")')
     assert source.index("tick();", refresh) < source.index('raw === "0"', refresh)
     assert source.index("tick();", refresh) < source.index("setInterval(tick", refresh)
@@ -957,44 +878,34 @@ def test_mobile_page_nav_and_desktop_link(monkeypatch):
         nav = re.search(r'<nav[^>]*data-view-nav[^>]*>.*?</nav>', text, re.S)
         assert nav is not None
         nav_html = nav.group(0)
-        assert nav_html.count("<button") == 6
+        assert nav_html.count("<button") == 5
         assert 'data-burger' in nav_html
         assert 'aria-controls="view-menu"' in nav_html
         assert 'aria-expanded' in nav_html
         assert 'id="view-menu"' in nav_html
         assert 'data-menu-open' in nav_html
         assert 'role="tablist"' in nav_html
-        assert nav_html.count('role="tab"') == 5
+        assert nav_html.count('role="tab"') == 4
         sections = re.findall(r'data-section="([a-z]+)"', nav_html)
-        assert sections == ["host", "containers", "agents", "git", "sessions"]
+        assert sections == ["host", "containers", "agents", "git"]
         labels = re.findall(r'<button[^>]*data-section="[^"]*"[^>]*>([^<]+)</button>', nav_html)
-        assert labels == ["Host", "Containers", "Agents", "Git", "Chats"]
+        assert labels == ["Host", "Containers", "Agents", "Git"]
         assert nav_html.count('aria-selected="true"') == 1
-        assert nav_html.count('aria-selected="false"') == 4
+        assert nav_html.count('aria-selected="false"') == 3
         panels = re.findall(r'<(?:section|div)[^>]*data-mobile-panel[^>]*>', text)
-        assert len(panels) == 5
+        assert len(panels) == 4
         for panel_tag in panels:
             section = re.search(r'data-section="([a-z]+)"', panel_tag).group(1)
             if section == "host":
                 assert "hidden" not in panel_tag
             else:
                 assert "hidden" in panel_tag
-        for panel_id in ("panel-host", "panel-containers", "panel-agents", "panel-git", "panel-sessions"):
+        for panel_id in ("panel-host", "panel-containers", "panel-agents", "panel-git"):
             assert f'id="{panel_id}"' in text
         assert 'id="host-body"' in text
-        assert 'id="sessions-body"' in text
         assert 'id="herdr-frame"' in text
         assert 'id="herdr-embed"' not in text
         assert "<iframe" not in text
-        for element_id in (
-            "new-session-form",
-            "session-kind",
-            "session-cwd",
-            "session-label",
-            "session-token",
-            "session-submit",
-        ):
-            assert f'id="{element_id}"' in text
 
 
 def test_metrics_includes_git_when_collectors_omit_it(monkeypatch):
@@ -1076,6 +987,7 @@ def test_linked_view_assets_have_no_innerhtml_or_http(monkeypatch):
     monkeypatch.setenv("DB_PATH", "")
     monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
     names = (
+        "tabler.css",
         "containers.css",
         "agents.css",
         "git.css",
@@ -1086,7 +998,6 @@ def test_linked_view_assets_have_no_innerhtml_or_http(monkeypatch):
         "git_view.js",
         "view_nav.js",
         "host_view.js",
-        "sessions_view.js",
     )
     application = create_app(collectors=_unavailable_collectors())
     with TestClient(application) as client:

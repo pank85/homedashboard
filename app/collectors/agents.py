@@ -20,6 +20,8 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
+from app.agent_configs import discover_agent_configs
+
 _STATUSES = frozenset({"working", "idle", "blocked", "done"})
 _SESSION_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _DURATION_MS_KEYS = ("elapsed_ms", "state_duration_ms", "duration_ms")
@@ -848,6 +850,7 @@ def collect_agents(
     cpu_sample_seconds: float = 0.2,
     clock_ticks: int | None = None,
     page_size: int | None = None,
+    config_home: str = "",
 ) -> dict:
     refreshed_at = _timestamp(now)
     if clock_ticks is None:
@@ -898,16 +901,38 @@ def collect_agents(
             if isinstance(exc, AssertionError):
                 raise
             proc_rows, proc_error = [], f"proc not readable: {proc_root}"
-    agents = list(herdr_rows) + list(proc_rows)
+    if config_home:
+        try:
+            config_rows = discover_agent_configs(config_home)
+            config_error = None
+        except Exception as exc:
+            if isinstance(exc, AssertionError):
+                raise
+            config_rows = []
+            config_error = "config scan failed"
+    else:
+        config_rows = []
+        config_error = None
+    agents = list(herdr_rows) + list(proc_rows) + list(config_rows)
+    sources = [
+        _source("herdr", herdr_error, len(herdr_rows), refreshed_at),
+        _source("proc", proc_error, len(proc_rows), refreshed_at),
+    ]
+    if config_home:
+        sources.append(
+            _source(
+                "config",
+                config_error,
+                sum(1 for row in config_rows if row["config_present"]),
+                refreshed_at,
+            )
+        )
     return {
         "available": True,
         "reason": None,
         "note": None if agents else "no agents detected",
         "refreshed_at": refreshed_at,
-        "sources": [
-            _source("herdr", herdr_error, len(herdr_rows), refreshed_at),
-            _source("proc", proc_error, len(proc_rows), refreshed_at),
-        ],
+        "sources": sources,
         "agents": agents,
         "herdr": _herdr_block(herdr),
         "workspaces": list(herdr.workspaces),

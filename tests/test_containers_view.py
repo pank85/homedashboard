@@ -247,8 +247,8 @@ def test_partials_copy_macros_and_do_not_call_filter_globals() -> None:
 
 def test_css_uses_dark_palette_and_tap_targets() -> None:
     css = VIEW_CSS.read_text(encoding="utf-8")
-    colors = set(re.findall(r"#[0-9a-fA-F]{3,8}", css))
-    assert colors == {"#0f1419", "#e7ecf1", "#1a2332", "#3dd68c", "#e6b35a", "#f07178"}
+    assert not re.findall(r"#[0-9a-fA-F]{3,8}", css)
+    assert "var(--tblr-body-bg)" in css
     assert "min-height: 44px" in css
     assert "http://" not in css
     assert "https://" not in css

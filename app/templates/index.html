@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/tabler.css">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/containers.css">
   <link rel="stylesheet" href="/static/agents.css">
@@ -24,14 +25,16 @@
   {%- if value < 0 -%}0{%- elif value > 100 -%}100{%- else -%}{{ value }}{%- endif -%}
   {%- else -%}0{%- endif -%}
   {%- endmacro %}
-  <header>
-    <h1>Dashboard</h1>
-    <p class="updated">Last updated <time id="last-updated">{{ generated_at }}</time></p>
+  <header class="navbar">
+    <div class="navbar-brand">
+      <h1>Dashboard</h1>
+      <p class="updated">Last updated <time id="last-updated">{{ generated_at }}</time></p>
+    </div>
     <div class="herdr-launch">
       {% if herdr.href %}
-      <a id="herdr-button" href="{{ herdr.href }}" target="_blank" rel="noopener noreferrer">Open Herdr Web</a>
+      <a id="herdr-button" class="btn btn-primary" href="{{ herdr.href }}" target="_blank" rel="noopener noreferrer">Open Herdr Web</a>
       {% else %}
-      <button id="herdr-button" type="button" disabled>Open Herdr Web</button>
+      <button id="herdr-button" class="btn btn-primary" type="button" disabled>Open Herdr Web</button>
       <p>Herdr Web URL not configured</p>
       {% endif %}
     </div>
@@ -44,7 +47,6 @@
       <button type="button" role="tab" id="tab-containers" data-section="containers" aria-selected="false" aria-controls="panel-containers">Containers</button>
       <button type="button" role="tab" id="tab-agents" data-section="agents" aria-selected="false" aria-controls="panel-agents">Agents</button>
       <button type="button" role="tab" id="tab-git" data-section="git" aria-selected="false" aria-controls="panel-git">Git</button>
-      <button type="button" role="tab" id="tab-sessions" data-section="sessions" aria-selected="false" aria-controls="panel-sessions">Chats</button>
     </div>
   </nav>
 
@@ -60,8 +62,6 @@
     </div>
 
     {% include "partials/host.html" %}
-
-    {% include "partials/sessions.html" %}
   </main>
 
   <section id="herdr-frame">
@@ -78,7 +78,6 @@
   <script src="/static/git_view.js"></script>
   <script src="/static/view_nav.js"></script>
   <script src="/static/host_view.js"></script>
-  <script src="/static/sessions_view.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

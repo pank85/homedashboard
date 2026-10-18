@@ -340,8 +340,9 @@ def test_static_git_view_has_no_inner_html_or_urls():
     assert "behind" not in script
     assert "dirty" not in script
     assert "min-height: 44px" in style
-    for color in ("#0f1419", "#e7ecf1", "#1a2332", "#3dd68c", "#e6b35a", "#f07178"):
-        assert color in style
+    assert "var(--tblr-body-bg)" in style
+    assert "var(--tblr-card-bg)" in style
+    assert "#0f1419" not in style
 
 
 def test_partial_sources_do_not_dump_objects_or_embed_urls():

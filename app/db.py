@@ -13,24 +13,6 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-STATUSES = ("starting", "running", "idle", "blocked", "done", "archived", "failed")
-
-_SESSION_COLUMNS = (
-    "id",
-    "label",
-    "agent_kind",
-    "herdr_session",
-    "workspace_id",
-    "tab_id",
-    "pane_id",
-    "agent_name",
-    "cwd",
-    "status",
-    "last_error",
-    "created_at",
-    "updated_at",
-)
-
 _SNAPSHOT_COLUMNS = (
     "observed_at",
     "herdr_session",
@@ -45,27 +27,10 @@ _SNAPSHOT_COLUMNS = (
     "cwd",
 )
 
-_CLOSED_STATUSES = ("archived", "failed", "starting")
-_ID_FIELDS = ("workspace_id", "tab_id", "pane_id", "agent_name")
 
 # Applied only when PRAGMA user_version is 0, then user_version is set to 1.
 # CREATE IF NOT EXISTS so a crash before the version bump can retry safely.
 SCHEMA_V1 = """
-CREATE TABLE IF NOT EXISTS chat_sessions (
-    id TEXT PRIMARY KEY,
-    label TEXT NOT NULL,
-    agent_kind TEXT NOT NULL,
-    herdr_session TEXT NOT NULL,
-    workspace_id TEXT NOT NULL DEFAULT '',
-    tab_id TEXT NOT NULL DEFAULT '',
-    pane_id TEXT NOT NULL DEFAULT '',
-    agent_name TEXT NOT NULL DEFAULT '',
-    cwd TEXT NOT NULL,
-    status TEXT NOT NULL,
-    last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS herdr_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     observed_at TEXT NOT NULL,
@@ -96,52 +61,6 @@ def _format_timestamp(moment: datetime) -> str:
 
 def _now_text() -> str:
     return _format_timestamp(datetime.now(timezone.utc))
-
-
-def _require_session_status(status: object) -> str:
-    if status not in STATUSES:
-        raise ValueError(f"unknown status: {status!r}")
-    return str(status)
-
-
-def _text_field(row: dict, key: str, *, required: bool) -> str:
-    if key not in row or row[key] is None:
-        if required:
-            raise ValueError(f"missing session field: {key}")
-        return ""
-    value = row[key]
-    if not isinstance(value, str):
-        raise ValueError(f"session field {key} must be str")
-    return value
-
-
-def _timestamp_field(row: dict, key: str, default: str) -> str:
-    if key not in row or row[key] is None:
-        return default
-    value = row[key]
-    if not isinstance(value, str):
-        raise ValueError(f"session field {key} must be str")
-    return value
-
-
-def _session_values(row: dict) -> dict[str, str]:
-    status = _require_session_status(row.get("status"))
-    stamp = _now_text()
-    return {
-        "id": _text_field(row, "id", required=True),
-        "label": _text_field(row, "label", required=True),
-        "agent_kind": _text_field(row, "agent_kind", required=True),
-        "herdr_session": _text_field(row, "herdr_session", required=True),
-        "workspace_id": _text_field(row, "workspace_id", required=False),
-        "tab_id": _text_field(row, "tab_id", required=False),
-        "pane_id": _text_field(row, "pane_id", required=False),
-        "agent_name": _text_field(row, "agent_name", required=False),
-        "cwd": _text_field(row, "cwd", required=True),
-        "status": status,
-        "last_error": _text_field(row, "last_error", required=False),
-        "created_at": _timestamp_field(row, "created_at", stamp),
-        "updated_at": _timestamp_field(row, "updated_at", stamp),
-    }
 
 
 def _snapshot_text(row: dict, key: str) -> str:
@@ -185,113 +104,6 @@ class DashboardDb:
         self.retention_days = retention_days
         self._lock = threading.RLock()
         self._conn: sqlite3.Connection | None = None
-
-    def create_session(self, row: dict) -> dict:
-        with self._lock:
-            values = _session_values(row)
-            conn = self._require_usable()
-            return self._insert_session(conn, values)
-
-    def list_sessions(self) -> list[dict]:
-        with self._lock:
-            conn = self._conn
-            if conn is None or not self.available:
-                return []
-            names = ", ".join(_SESSION_COLUMNS)
-            rows = conn.execute(
-                f"SELECT {names} FROM chat_sessions ORDER BY created_at, id"
-            ).fetchall()
-            return [dict(row) for row in rows]
-
-    def get_session(self, session_id: str) -> dict | None:
-        with self._lock:
-            conn = self._conn
-            if conn is None or not self.available:
-                return None
-            return self._get(conn, session_id)
-
-    def mark_failed(self, session_id: str, last_error: str, **ids: str) -> dict:
-        with self._lock:
-            unknown = set(ids) - set(_ID_FIELDS)
-            if unknown:
-                raise ValueError(f"unknown session field: {sorted(unknown)[0]}")
-            if not isinstance(last_error, str):
-                raise ValueError("last_error must be str")
-            fields: dict[str, str] = {
-                "status": "failed",
-                "last_error": last_error,
-                "updated_at": _now_text(),
-            }
-            for key in _ID_FIELDS:
-                if key not in ids:
-                    continue
-                value = ids[key]
-                if not isinstance(value, str):
-                    raise ValueError(f"{key} must be str")
-                fields[key] = value
-            conn = self._require_usable()
-            return self._update(conn, session_id, fields)
-
-    def mark_running(
-        self,
-        session_id: str,
-        *,
-        workspace_id: str,
-        tab_id: str,
-        pane_id: str,
-        agent_name: str,
-    ) -> dict:
-        with self._lock:
-            for key, value in (
-                ("workspace_id", workspace_id),
-                ("tab_id", tab_id),
-                ("pane_id", pane_id),
-                ("agent_name", agent_name),
-            ):
-                if not isinstance(value, str):
-                    raise ValueError(f"{key} must be str")
-            conn = self._require_usable()
-            return self._update(
-                conn,
-                session_id,
-                {
-                    "status": "running",
-                    "workspace_id": workspace_id,
-                    "tab_id": tab_id,
-                    "pane_id": pane_id,
-                    "agent_name": agent_name,
-                    "updated_at": _now_text(),
-                },
-            )
-
-    def update_status_if_open(self, session_id: str, status: str) -> None:
-        """Store ``status`` unless the row is archived, failed, or starting.
-
-        ``working`` is not a session status. Callers map it to ``running``.
-        """
-        with self._lock:
-            stored = _require_session_status(status)
-            conn = self._conn
-            if conn is None or not self.available:
-                return
-            current = self._get(conn, session_id)
-            if current is None or current["status"] in _CLOSED_STATUSES:
-                return
-            if current["status"] == stored:
-                return
-            self._update(conn, session_id, {"status": stored, "updated_at": _now_text()})
-
-    def archive_session(self, session_id: str) -> dict | None:
-        with self._lock:
-            conn = self._require_usable()
-            current = self._get(conn, session_id)
-            if current is None:
-                return None
-            return self._update(
-                conn,
-                session_id,
-                {"status": "archived", "updated_at": _now_text()},
-            )
 
     def insert_snapshots(self, rows: list[dict], *, now: datetime | None = None) -> int:
         """Insert, then delete rows with ``observed_at`` strictly older than the cutoff.
@@ -340,55 +152,6 @@ class DashboardDb:
         conn = self._conn
         assert conn is not None
         return conn
-
-    def _get(self, conn: sqlite3.Connection, session_id: str) -> dict | None:
-        names = ", ".join(_SESSION_COLUMNS)
-        row = conn.execute(
-            f"SELECT {names} FROM chat_sessions WHERE id = ?",
-            (session_id,),
-        ).fetchone()
-        if row is None:
-            return None
-        return {column: row[column] for column in _SESSION_COLUMNS}
-
-    def _insert_session(self, conn: sqlite3.Connection, values: dict[str, str]) -> dict:
-        names = ", ".join(_SESSION_COLUMNS)
-        placeholders = ", ".join("?" for _ in _SESSION_COLUMNS)
-        try:
-            conn.execute(
-                f"INSERT INTO chat_sessions ({names}) VALUES ({placeholders})",
-                [values[column] for column in _SESSION_COLUMNS],
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        stored = self._get(conn, values["id"])
-        if stored is None:
-            raise LookupError(values["id"])
-        return stored
-
-    def _update(self, conn: sqlite3.Connection, session_id: str, fields: dict[str, str]) -> dict:
-        columns = [column for column in _SESSION_COLUMNS if column in fields]
-        assignments = ", ".join(f"{column} = ?" for column in columns)
-        try:
-            cursor = conn.execute(
-                f"UPDATE chat_sessions SET {assignments} WHERE id = ?",
-                [fields[column] for column in columns] + [session_id],
-            )
-            if cursor.rowcount == 0:
-                conn.rollback()
-                raise LookupError(session_id)
-            conn.commit()
-        except LookupError:
-            raise
-        except Exception:
-            conn.rollback()
-            raise
-        stored = self._get(conn, session_id)
-        if stored is None:
-            raise LookupError(session_id)
-        return stored
 
     def _insert_snapshot(self, conn: sqlite3.Connection, row: dict, stamp: str) -> None:
         observed = row.get("observed_at")
@@ -441,6 +204,8 @@ def _open_db(path: str, *, retention_days: int) -> DashboardDb:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.row_factory = sqlite3.Row
         _migrate(conn)
+        conn.execute("DROP TABLE IF EXISTS chat_sessions")
+        conn.commit()
     except OSError:
         return _disable(db, conn, f"db path not writable: {path}")
     except sqlite3.Error:

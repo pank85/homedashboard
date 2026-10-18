@@ -234,56 +234,6 @@
     });
   }
 
-  function mutationsEnabled() {
-    var form = document.getElementById("new-session-form");
-    return !!(form && form.getAttribute("data-mutations-enabled") === "true");
-  }
-
-  function renderSession(root, row) {
-    var command = typeof row.attach_command === "string" ? row.attach_command : "";
-    var card = add(root, "article", null, "session-card");
-    add(card, "p", "label " + human(row.label));
-    add(card, "p", "kind " + human(row.agent_kind));
-    add(card, "p", "workspace " + human(row.workspace_id));
-    add(card, "p", "status " + human(row.status));
-    add(card, "p", "cwd " + human(row.cwd));
-    add(card, "p", "created " + human(row.created_relative));
-    add(card, "p", "updated " + human(row.updated_relative));
-    var link = add(card, "a", "Open Herdr Web");
-    link.href = "/herdr/";
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    var input = add(card, "input", null, "attach-command");
-    input.type = "text";
-    input.readOnly = true;
-    input.value = command;
-    var copy = add(card, "button", "Copy", "copy-attach");
-    copy.type = "button";
-    copy.setAttribute("data-attach-command", command);
-    var archive = add(card, "button", "Archive", "archive-session");
-    archive.type = "button";
-    archive.setAttribute("data-session-id", row.id || "");
-    if (!mutationsEnabled()) {
-      archive.disabled = true;
-    }
-  }
-
-  function renderSessions(data) {
-    data = data || {};
-    var note = document.getElementById("sessions-unavailable");
-    if (note) {
-      note.textContent = data.available ? "" : "unavailable: " + (data.reason || "");
-    }
-    var root = document.getElementById("sessions-body");
-    if (!root) {
-      return;
-    }
-    clear(root);
-    (data.sessions || []).forEach(function (row) {
-      renderSession(root, row || {});
-    });
-  }
-
   function tick() {
     fetch("/api/metrics", { headers: { Accept: "application/json" } })
       .then(function (response) {
@@ -308,142 +258,10 @@
         } else {
           renderHost(data.host);
         }
-        if (typeof globalThis.renderSessionsView === "function") {
-          globalThis.renderSessionsView(data.sessions);
-        } else {
-          renderSessions(data.sessions);
-        }
       })
       .catch(function () {
         return null;
       });
-  }
-
-  function showActionReason(text) {
-    var node = document.getElementById("session-action-reason");
-    if (node) {
-      node.textContent = text || "";
-    }
-  }
-
-  function chatToken() {
-    var input = document.getElementById("session-token");
-    if (input && input.value) {
-      return input.value;
-    }
-    try {
-      return localStorage.getItem("homedashboard.chatApiToken") || "";
-    } catch (err) {
-      return "";
-    }
-  }
-
-  function authHeaders(token) {
-    return {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + token
-    };
-  }
-
-  function handleMutation(response) {
-    return response.json().then(function (payload) {
-      return { ok: response.ok, status: response.status, body: payload || {} };
-    }, function () {
-      return { ok: response.ok, status: response.status, body: {} };
-    }).then(function (result) {
-      if (result.status === 400 || result.status === 401 || result.status === 403 || result.status === 502 || result.status === 503) {
-        var reason = result.body && typeof result.body.reason === "string" ? result.body.reason : "";
-        showActionReason(reason);
-        return result;
-      }
-      if (result.ok) {
-        showActionReason("");
-        tick();
-      }
-      return result;
-    });
-  }
-
-  function onCreate(event) {
-    event.preventDefault();
-    var tokenInput = document.getElementById("session-token");
-    var typed = tokenInput && tokenInput.value ? tokenInput.value : "";
-    if (typed) {
-      try {
-        localStorage.setItem("homedashboard.chatApiToken", typed);
-      } catch (err) {
-        /* keep the field value for the request if storage is blocked */
-      }
-    }
-    var token = chatToken();
-    var kind = document.getElementById("session-kind");
-    var cwd = document.getElementById("session-cwd");
-    var label = document.getElementById("session-label");
-    fetch("/api/sessions", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({
-        kind: kind ? kind.value : "",
-        cwd: cwd ? cwd.value : "",
-        label: label ? label.value : ""
-      })
-    }).then(handleMutation).catch(function () {
-      showActionReason("request failed");
-    });
-  }
-
-  function selectAttach(input) {
-    if (!input) {
-      return;
-    }
-    input.focus();
-    input.select();
-  }
-
-  function copyAttach(button) {
-    var command = button.getAttribute("data-attach-command") || "";
-    var article = button.closest("article");
-    var input = article ? article.querySelector(".attach-command") : null;
-    if (!command && input) {
-      command = input.value;
-    }
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-      navigator.clipboard.writeText(command).then(function () {
-        return null;
-      }, function () {
-        selectAttach(input);
-      });
-      return;
-    }
-    selectAttach(input);
-  }
-
-  function onSessionClick(event) {
-    var target = event.target;
-    if (!target || !target.closest) {
-      return;
-    }
-    var copy = target.closest(".copy-attach");
-    if (copy) {
-      copyAttach(copy);
-      return;
-    }
-    var archive = target.closest(".archive-session");
-    if (!archive || archive.disabled) {
-      return;
-    }
-    var id = archive.getAttribute("data-session-id") || "";
-    if (!id) {
-      return;
-    }
-    fetch("/api/sessions/" + encodeURIComponent(id) + "/archive", {
-      method: "POST",
-      headers: authHeaders(chatToken()),
-      body: "{}"
-    }).then(handleMutation).catch(function () {
-      showActionReason("request failed");
-    });
   }
 
   var filterText = document.getElementById("container-filter-text");
@@ -466,15 +284,6 @@
   var filterSort = document.getElementById("container-filter-sort");
   if (filterSort) {
     filterSort.addEventListener("change", onFilterChange);
-  }
-
-  var form = document.getElementById("new-session-form");
-  if (form) {
-    form.addEventListener("submit", onCreate);
-  }
-  var sessionsPanel = document.getElementById("panel-sessions");
-  if (sessionsPanel) {
-    sessionsPanel.addEventListener("click", onSessionClick);
   }
 
   if (typeof globalThis.initViewNav === "function") {

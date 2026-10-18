@@ -57,6 +57,9 @@
         <h3 class="agent-title">{{ card_title }}</h3>
         <p class="agent-badges"><span class="badge badge-status status-{{ status_word }}">{{ status_word }}</span> <span class="badge badge-source source-{{ source_word }}">{{ source_word }}</span> <span class="badge badge-kind kind-{{ kind_word }}">{{ kind_word }}</span></p>
         <p class="agent-meta">workspace {{ workspace_word }} · cwd {{ human(row.cwd) }}</p>
+        {% if row.source == "config" %}
+        <p class="agent-config">config {{ human(row.config_path) }} · {{ "present" if row.config_present else "absent" }} · model {{ human(row.model) }}</p>
+        {% endif %}
         {% if row.elapsed_source == "herdr" %}
         <p class="agent-elapsed">elapsed {{ human(row.elapsed_human) }}</p>
         {% endif %}

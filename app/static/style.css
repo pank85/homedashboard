@@ -1,13 +1,13 @@
 html {
   color-scheme: dark;
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
 }
 
 body {
   margin: 0;
-  background: #0f1419;
-  color: #e7ecf1;
+  background: var(--tblr-body-bg);
+  color: var(--tblr-body-color);
   font: 16px/1.45 system-ui, sans-serif;
   padding: 1rem;
 }
@@ -25,7 +25,7 @@ main {
 }
 
 section {
-  background: #1a2332;
+  background: var(--tblr-card-bg);
   border-radius: 8px;
   padding: 1rem;
 }
@@ -46,8 +46,7 @@ p {
   padding: 0.6rem 1rem;
   border: 0;
   border-radius: 8px;
-  background: #3d7ea6;
-  color: #e7ecf1;
+  color: var(--tblr-body-color);
   font: inherit;
   font-weight: 700;
   text-decoration: none;
@@ -62,19 +61,19 @@ p {
   width: 100%;
   min-height: 24rem;
   border: 0;
-  background: #0f1419;
+  background: var(--tblr-body-bg);
 }
 
 .level-ok {
-  color: #3dd68c;
+  color: var(--tblr-success);
 }
 
 .level-warn {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 .level-crit {
-  color: #f07178;
+  color: var(--tblr-danger);
 }
 
 @media (max-width: 640px) {
@@ -108,7 +107,7 @@ p {
 
 .container-card,
 .session-card {
-  background: #0f1419;
+  background: var(--tblr-body-bg);
   border-radius: 8px;
   padding: 0.75rem;
 }
@@ -118,31 +117,31 @@ p {
   margin: 0 0.35rem 0.5rem 0;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: #0f1419;
+  background: var(--tblr-body-bg);
   font-weight: 700;
 }
 
 .badge.state-running,
 .badge.health-healthy {
-  color: #3dd68c;
+  color: var(--tblr-success);
 }
 
 .badge.state-exited,
 .badge.state-restarting,
 .badge.health-unhealthy {
-  color: #f07178;
+  color: var(--tblr-danger);
 }
 
 .badge.state-paused,
 .badge.state-created,
 .badge.health-none {
-  color: #e6b35a;
+  color: var(--tblr-warning);
 }
 
 .meter {
   height: 0.55rem;
   margin: 0 0 0.5rem;
-  background: #0f1419;
+  background: var(--tblr-body-bg);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -152,7 +151,7 @@ p {
   height: 100%;
   width: 0;
   max-width: 100%;
-  background: #3d7ea6;
+  background: var(--tblr-primary);
 }
 
 .filters,
@@ -174,16 +173,16 @@ p {
   box-sizing: border-box;
   min-height: 44px;
   font: inherit;
-  color: #e7ecf1;
-  background: #0f1419;
-  border: 1px solid #3d7ea6;
+  color: var(--tblr-body-color);
+  background: var(--tblr-body-bg);
+  border: 1px solid var(--tblr-primary);
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
 }
 
 #new-session-form button,
 .session-card button {
-  background: #3d7ea6;
+  background: var(--tblr-primary);
   font-weight: 700;
 }
 

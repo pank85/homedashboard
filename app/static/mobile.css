@@ -48,9 +48,9 @@
     z-index: 20;
     margin: 0.25rem 0 0;
     padding: 0.5rem;
-    border: 1px solid #3d7ea6;
+    border: 1px solid var(--tblr-primary);
     border-radius: 8px;
-    background: #0f1419;
+    background: var(--tblr-body-bg);
   }
 
   .view-nav[data-menu-open="true"] #view-menu {
