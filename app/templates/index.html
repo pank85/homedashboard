@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/agents.css">
   <link rel="stylesheet" href="/static/git.css">
   <link rel="stylesheet" href="/static/desktop.css">
+  <link rel="stylesheet" href="/static/mobile.css">
 </head>
 <body data-view="desktop" data-refresh="{{ refresh_seconds }}">
   {% macro human(value) -%}
@@ -25,7 +26,6 @@
   {%- endmacro %}
   <header>
     <h1>Dashboard</h1>
-    <p class="view-switch"><a href="/m">Mobile</a></p>
     <p class="updated">Last updated <time id="last-updated">{{ generated_at }}</time></p>
     <div class="herdr-launch">
       {% if herdr.href %}
@@ -37,87 +37,31 @@
     </div>
   </header>
 
+  <nav class="view-nav" data-view-nav data-menu-open="false" aria-label="Dashboard sections">
+    <button type="button" data-burger aria-expanded="false" aria-controls="view-menu">Sections</button>
+    <div id="view-menu" role="tablist">
+      <button type="button" role="tab" id="tab-host" data-section="host" aria-selected="true" aria-controls="panel-host">Host</button>
+      <button type="button" role="tab" id="tab-containers" data-section="containers" aria-selected="false" aria-controls="panel-containers">Containers</button>
+      <button type="button" role="tab" id="tab-agents" data-section="agents" aria-selected="false" aria-controls="panel-agents">Agents</button>
+      <button type="button" role="tab" id="tab-git" data-section="git" aria-selected="false" aria-controls="panel-git">Git</button>
+      <button type="button" role="tab" id="tab-sessions" data-section="sessions" aria-selected="false" aria-controls="panel-sessions">Chats</button>
+    </div>
+  </nav>
+
   <main>
-    {% include "partials/containers_desktop.html" %}
-    {% include "partials/agents_desktop.html" %}
-    {% include "partials/git_desktop.html" %}
+    <div data-mobile-panel data-section="containers" role="tabpanel" hidden>
+      {% include "partials/containers_desktop.html" %}
+    </div>
+    <div data-mobile-panel data-section="agents" role="tabpanel" hidden>
+      {% include "partials/agents_desktop.html" %}
+    </div>
+    <div data-mobile-panel data-section="git" role="tabpanel" hidden>
+      {% include "partials/git_desktop.html" %}
+    </div>
 
-    <section id="panel-host">
-      <h2>Host</h2>
-      <div id="host-body">
-        <p>{{ host.view }}</p>
-        {% if not host.available and host.reason %}
-        <p>unavailable: {{ host.reason }}</p>
-        {% endif %}
-        {% if host.cpu.available %}
-        <p class="{% if host.cpu.level %}level-{{ host.cpu.level }}{% endif %}">CPU {{ host.cpu.percent }} cores {{ host.cpu.cores }} load {{ host.cpu.loadavg }}</p>
-        {% else %}
-        <p>unavailable: {{ host.cpu.reason }}</p>
-        {% endif %}
-        {% if host.memory.available %}
-        <p class="{% if host.memory.level %}level-{{ host.memory.level }}{% endif %}">RAM {{ host.memory.used_bytes }} / {{ host.memory.total_bytes }} {{ host.memory.percent }}</p>
-        {% else %}
-        <p>unavailable: {{ host.memory.reason }}</p>
-        {% endif %}
-        {% for disk in host.disks %}
-        {% if disk.available %}
-        <p class="{% if disk.level %}level-{{ disk.level }}{% endif %}">disk {{ disk.path }} {{ disk.percent }}</p>
-        {% else %}
-        <p>unavailable: {{ disk.reason }}</p>
-        {% endif %}
-        {% endfor %}
-      </div>
-    </section>
+    {% include "partials/host.html" %}
 
-    <section id="panel-sessions">
-      <h2>Sessions</h2>
-      <p id="sessions-unavailable">{% if not sessions.available %}unavailable: {{ sessions.reason }}{% endif %}</p>
-      <form id="new-session-form" method="post" action="/api/sessions" data-mutations-enabled="{{ "true" if sessions.mutations_enabled else "false" }}">
-        <label for="session-kind">Kind
-          <select id="session-kind" name="kind"{% if not sessions.mutations_enabled %} disabled{% endif %}>
-            {% for kind in sessions.kinds %}
-            <option value="{{ kind }}">{{ kind }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label for="session-cwd">Cwd
-          <input id="session-cwd" name="cwd" type="text" autocomplete="off"{% if not sessions.mutations_enabled %} disabled{% endif %}>
-        </label>
-        <label for="session-label">Label
-          <input id="session-label" name="label" type="text" autocomplete="off"{% if not sessions.mutations_enabled %} disabled{% endif %}>
-        </label>
-        <label for="session-token">Token
-          <input id="session-token" type="password" autocomplete="off"{% if not sessions.mutations_enabled %} disabled{% endif %}>
-        </label>
-        {% if not sessions.mutations_enabled %}
-        <p>CHAT_API_TOKEN unset</p>
-        {% if sessions.reason %}
-        <p>{{ sessions.reason }}</p>
-        {% endif %}
-        {% endif %}
-        <button type="submit" id="session-submit"{% if not sessions.mutations_enabled %} disabled{% endif %}>Start</button>
-      </form>
-      <p id="session-action-reason"></p>
-      <p>Archive only updates this dashboard. It does not stop or delete the herdr workspace, tab, or agent.</p>
-      <p>herdr session attach &lt;name&gt; attaches the herdr session, not one workspace. herdr --session &lt;name&gt; attach is not a working command on herdr 0.9.5.</p>
-      <div id="sessions-body">
-        {% for row in sessions.sessions %}
-        <article class="session-card">
-          <p>label {{ human(row.label) }}</p>
-          <p>kind {{ human(row.agent_kind) }}</p>
-          <p>workspace {{ human(row.workspace_id) }}</p>
-          <p>status {{ human(row.status) }}</p>
-          <p>cwd {{ human(row.cwd) }}</p>
-          <p>created {{ human(row.created_relative) }}</p>
-          <p>updated {{ human(row.updated_relative) }}</p>
-          <a href="/herdr/" target="_blank" rel="noopener noreferrer">Open Herdr Web</a>
-          <input class="attach-command" type="text" readonly value="{{ row.attach_command }}">
-          <button type="button" class="copy-attach" data-attach-command="{{ row.attach_command }}">Copy</button>
-          <button type="button" class="archive-session" data-session-id="{{ row.id }}"{% if not sessions.mutations_enabled %} disabled{% endif %}>Archive</button>
-        </article>
-        {% endfor %}
-      </div>
-    </section>
+    {% include "partials/sessions.html" %}
   </main>
 
   <section id="herdr-frame">
@@ -133,6 +77,8 @@
   <script src="/static/agents_view.js"></script>
   <script src="/static/git_view.js"></script>
   <script src="/static/view_nav.js"></script>
+  <script src="/static/host_view.js"></script>
+  <script src="/static/sessions_view.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

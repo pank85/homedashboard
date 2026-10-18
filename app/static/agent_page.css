@@ -1,0 +1,90 @@
+.agent-page {
+  background: #0f1419;
+  color: #e7ecf1;
+  margin: 0 auto;
+  max-width: 60rem;
+  padding: 1rem;
+}
+
+.agent-back {
+  display: inline-block;
+  margin: 0 0 1rem;
+  color: #e6b35a;
+}
+
+.agent-heading {
+  margin: 0 0 0.75rem;
+}
+
+.agent-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin: 0 0 0.5rem;
+}
+
+.agent-badges .badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #1a2332;
+  color: #e7ecf1;
+  font-weight: 700;
+}
+
+.agent-badges .badge.status-working,
+.agent-badges .badge.status-running,
+.agent-badges .badge.badge-running {
+  color: #3dd68c;
+}
+
+.agent-badges .badge.status-idle,
+.agent-badges .badge.status-unknown,
+.agent-badges .badge.badge-live {
+  color: #e6b35a;
+}
+
+.agent-badges .badge.status-error,
+.agent-badges .badge.status-failed,
+.agent-badges .badge.status-exited {
+  color: #f07178;
+}
+
+.agent-detail {
+  margin: 0 0 1rem;
+}
+
+.agent-chats {
+  margin: 0 0 1rem;
+}
+
+.agent-chats h2 {
+  margin: 0 0 0.5rem;
+}
+
+.agent-chats .session-card {
+  background: #1a2332;
+  color: #e7ecf1;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.agent-chats .session-card h3 {
+  margin: 0 0 0.25rem;
+}
+
+.agent-chats .session-meta,
+.agent-chats .session-updated {
+  margin: 0;
+}
+
+.agent-empty {
+  color: #e6b35a;
+}
+
+.agent-blocked {
+  color: #f07178;
+  margin: 0;
+}

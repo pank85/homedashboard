@@ -11,6 +11,7 @@ from __future__ import annotations
 from app.formatting import (
     format_bytes,
     format_duration,
+    format_loadavg,
     format_percent,
     format_relative,
     health_label,
@@ -72,6 +73,8 @@ def _present_host(host: object) -> object:
         cpu_out = dict(cpu)
         if "percent" in cpu:
             cpu_out["percent_human"] = format_percent(cpu["percent"])
+        if "loadavg" in cpu:
+            cpu_out["loadavg_human"] = format_loadavg(cpu["loadavg"])
         out["cpu"] = cpu_out
     memory = out.get("memory")
     if isinstance(memory, dict):

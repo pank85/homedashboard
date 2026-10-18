@@ -1,0 +1,39 @@
+<section id="panel-host" data-mobile-panel data-section="host" role="tabpanel">
+  <h2>Host</h2>
+  <div id="host-body">
+    <p>{{ host.view }}</p>
+    {% if not host.available and host.reason %}
+    <p>unavailable: {{ host.reason }}</p>
+    {% endif %}
+    {% if host.cpu.available %}
+    <p class="{% if host.cpu.level %}level-{{ host.cpu.level }}{% endif %}">CPU {{ host.cpu.percent_human }} · {{ host.cpu.cores }} cores · load {{ host.cpu.loadavg_human }}</p>
+    {% else %}
+    <p>unavailable: {{ host.cpu.reason }}</p>
+    {% endif %}
+    {% if host.memory.available %}
+    <p class="{% if host.memory.level %}level-{{ host.memory.level }}{% endif %}">RAM {{ host.memory.used_human }} / {{ host.memory.total_human }} · {{ host.memory.percent_human }}</p>
+    {% else %}
+    <p>unavailable: {{ host.memory.reason }}</p>
+    {% endif %}
+    {% for disk in host.disks %}
+    {% if disk.available %}
+    <p class="{% if disk.level %}level-{{ disk.level }}{% endif %}">disk {{ disk.path }} · {{ disk.percent_human }} · {{ disk.used_human }} / {{ disk.total_human }}</p>
+    {% else %}
+    <p>unavailable: {{ disk.reason }}</p>
+    {% endif %}
+    {% endfor %}
+    {% set seen_agents = [] %}
+    {% set running_agents = [] %}
+    {% if agents and agents.agents is sequence and agents.agents is not string and agents.agents is not mapping %}
+    {% for row in agents.agents %}
+    {% set identity = row.kind if row.kind else row.label %}
+    {% if identity not in seen_agents %}{% set _ = seen_agents.append(identity) %}{% endif %}
+    {% if (row.status == 'working' or row.source == 'proc') and identity not in running_agents %}{% set _ = running_agents.append(identity) %}{% endif %}
+    {% endfor %}
+    {% endif %}
+    <div id="host-summary">
+      <p>{% if containers and containers.available %}{{ (containers.containers or []) | selectattr('state', 'equalto', 'running') | list | length }} running containers{% else %}containers unavailable{% endif %}</p>
+      <p>{% if agents and agents.agents is sequence and agents.agents is not string and agents.agents is not mapping %}{{ seen_agents | length }} CLI AI agents / {{ running_agents | length }} running{% else %}agents unavailable{% endif %}</p>
+    </div>
+  </div>
+</section>

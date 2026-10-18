@@ -23,6 +23,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app.agent_pages import agent_page_data
+
 _LOGGER = logging.getLogger("homedashboard")
 _APP_DIR = Path(__file__).resolve().parent
 _HERDR_HREF = "/herdr/"
@@ -443,6 +445,7 @@ def create_app(
             "mutations_enabled": mutations_enabled(),
             "kinds": list(AGENT_START_KINDS),
             "sessions": [],
+            "herdr_session": settings.herdr_session,
         }
 
     def sessions_object() -> dict[str, Any]:
@@ -455,6 +458,7 @@ def create_app(
                 "mutations_enabled": enabled,
                 "kinds": kinds,
                 "sessions": [],
+                "herdr_session": settings.herdr_session,
             }
         try:
             rows = db.list_sessions()
@@ -467,6 +471,7 @@ def create_app(
             "mutations_enabled": enabled,
             "kinds": kinds,
             "sessions": [session_public(row) for row in rows],
+            "herdr_session": settings.herdr_session,
         }
 
     def normalize_herdr_status(value: object) -> str:
@@ -883,8 +888,25 @@ def create_app(
     def mobile(request: Request):
         return templates.TemplateResponse(
             request=request,
-            name="mobile.html",
+            name="index.html",
             context=dashboard(),
+        )
+
+    @app.get("/agents/{agent_key}")
+    def agent_page(agent_key: str, request: Request):
+        data = agent_page_data(
+            present_section("agents", call_agents(_now())),
+            present_section("sessions", sessions_object()),
+            agent_key,
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="agent.html",
+            context={
+                "refresh_seconds": settings.refresh_seconds,
+                "agent": data,
+            },
+            status_code=200 if data is not None else 404,
         )
 
     return app

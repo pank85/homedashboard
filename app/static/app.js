@@ -5,6 +5,7 @@
   }
 
   var lastContainers = null;
+  var viewQuery = window.matchMedia("(max-width: 767px)");
 
   function clear(node) {
     while (node.firstChild) {
@@ -43,7 +44,9 @@
   }
 
   function pageView() {
-    return body.getAttribute("data-view") || "desktop";
+    var mobile = viewQuery.matches;
+    body.setAttribute("data-view", mobile ? "mobile" : "desktop");
+    return mobile ? "mobile" : "desktop";
   }
 
   function containerSummary(rows) {
@@ -300,8 +303,16 @@
         if (typeof globalThis.renderGitView === "function") {
           globalThis.renderGitView(document.getElementById("git-body"), data.git, pageView());
         }
-        renderHost(data.host);
-        renderSessions(data.sessions);
+        if (typeof globalThis.renderHostView === "function") {
+          globalThis.renderHostView(document.getElementById("host-body"), data.host, data.containers, data.agents);
+        } else {
+          renderHost(data.host);
+        }
+        if (typeof globalThis.renderSessionsView === "function") {
+          globalThis.renderSessionsView(data.sessions);
+        } else {
+          renderSessions(data.sessions);
+        }
       })
       .catch(function () {
         return null;
@@ -468,6 +479,20 @@
 
   if (typeof globalThis.initViewNav === "function") {
     globalThis.initViewNav();
+  }
+
+  pageView();
+
+  if (viewQuery.addEventListener) {
+    viewQuery.addEventListener("change", function () {
+      pageView();
+      tick();
+    });
+  } else if (viewQuery.addListener) {
+    viewQuery.addListener(function () {
+      pageView();
+      tick();
+    });
   }
 
   var raw = body.getAttribute("data-refresh");

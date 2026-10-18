@@ -86,6 +86,25 @@ def format_percent(value: object) -> str:
         return "unknown"
     return f"{_one_decimal(Decimal(value))}%"
 
+def format_loadavg(value: object) -> str:
+    """One-decimal loadavg string; ``unknown`` for missing/non-list values."""
+    if not isinstance(value, (list, tuple)) or isinstance(value, (str, bytes)):
+        return "unknown"
+    if len(value) == 0:
+        return "unknown"
+    parts = []
+    for item in value:
+        if not _is_number(item):
+            return "unknown"
+        try:
+            num = Decimal(item)
+            if not num.is_finite():
+                return "unknown"
+        except Exception:
+            return "unknown"
+        parts.append(_one_decimal(num))
+    return " · ".join(parts)
+
 
 def format_relative(timestamp: str | None, now: datetime | None = None) -> str:
     """Relative age of an ISO timestamp; ``unknown`` if absent or future."""

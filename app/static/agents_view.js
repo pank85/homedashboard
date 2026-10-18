@@ -92,26 +92,45 @@
     }
   }
 
+  function agentKey(agent) {
+    agent = agent && typeof agent === "object" ? agent : {};
+    var identity = typeof agent.kind === "string" && agent.kind !== "" ? agent.kind : agent.label;
+    if (typeof identity !== "string" || identity === "") {
+      return "";
+    }
+    var key = identity.toLowerCase();
+    if (!/^[a-z][a-z0-9-]{0,31}$/.test(key)) {
+      return "";
+    }
+    return key;
+  }
+
   function renderCard(group, agent) {
+    var key = agentKey(agent);
     var card = add(group, "article", null, "agent-card");
-    add(card, "h3", cardTitle(agent), "agent-title");
-    var badges = add(card, "p", null, "agent-badges");
+    var body = card;
+    if (key) {
+      body = add(card, "a", null, "agent-card-link");
+      body.setAttribute("href", "/agents/" + key);
+    }
+    add(body, "h3", cardTitle(agent), "agent-title");
+    var badges = add(body, "p", null, "agent-badges");
     add(badges, "span", human(agent.status), "badge badge-status status-" + human(agent.status));
     badges.appendChild(document.createTextNode(" "));
     add(badges, "span", human(agent.source), "badge badge-source source-" + human(agent.source));
     badges.appendChild(document.createTextNode(" "));
     add(badges, "span", human(agent.kind), "badge badge-kind kind-" + human(agent.kind));
     var workspace = agent.workspace_label ? agent.workspace_label : groupTitle(agent);
-    add(card, "p", "workspace " + workspace + " · cwd " + human(agent.cwd), "agent-meta");
+    add(body, "p", "workspace " + workspace + " · cwd " + human(agent.cwd), "agent-meta");
     if (agent.elapsed_source === "herdr") {
-      add(card, "p", "elapsed " + human(agent.elapsed_human), "agent-elapsed");
+      add(body, "p", "elapsed " + human(agent.elapsed_human), "agent-elapsed");
     }
     if (agent.source === "proc") {
       if (presentText(agent.cpu_percent_human)) {
-        add(card, "p", "cpu " + human(agent.cpu_percent_human), "agent-cpu");
+        add(body, "p", "cpu " + human(agent.cpu_percent_human), "agent-cpu");
       }
       if (presentText(agent.rss_human)) {
-        add(card, "p", "rss " + human(agent.rss_human), "agent-rss");
+        add(body, "p", "rss " + human(agent.rss_human), "agent-rss");
       }
     }
   }

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Agent · Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/agents.css">
+  <link rel="stylesheet" href="/static/agent_page.css">
+</head>
+<body data-view="desktop" data-refresh="{{ refresh_seconds }}">
+  {% macro human(value) -%}
+  {%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
+  {%- endmacro %}
+  <a class="agent-back" href="/#agents">Back to agents</a>
+  <main id="agent-page" class="agent-page" data-agent-key="{{ agent.key if agent else "" }}">
+    {% if agent %}
+    <h1 id="agent-heading" class="agent-heading">{{ human(agent.title) }}</h1>
+    <p class="agent-badges">
+      <span id="agent-status" class="badge badge-status status-{{ human(agent.status) }}">{{ human(agent.status) }}</span>
+      <span id="agent-source" class="badge badge-source source-{{ human(agent.source) }}">{{ human(agent.source) }}</span>
+      {% if agent.running == "session" %}<span id="agent-running" class="badge badge-running">running</span>
+      {% elif agent.running == "agent" %}<span id="agent-running" class="badge badge-live">live</span>
+      {% else %}<span id="agent-running" class="badge badge-running"></span>{% endif %}
+    </p>
+    <p id="agent-cwd" class="agent-detail">cwd {{ human(agent.cwd) }} · source {{ human(agent.source) }}</p>
+    <section id="agent-chats" class="agent-chats">
+      <h2>Chats</h2>
+      {% if agent.sessions %}
+      {% for row in agent.sessions %}
+      {% set chat = row if row is mapping else {} %}
+      <article class="session-card">
+        <h3>{{ human(chat.label) }}</h3>
+        <p class="session-meta">agent {{ human(chat.agent_kind) }} · workspace {{ human(chat.workspace_id) }} · status {{ human(chat.status) }} · cwd {{ human(chat.cwd) }}</p>
+        {% if chat.updated_relative %}<p class="session-updated">updated {{ human(chat.updated_relative) }}</p>{% endif %}
+      </article>
+      {% endfor %}
+      {% else %}
+      <p class="agent-empty">No chats for this agent.</p>
+      {% endif %}
+    </section>
+    <p class="agent-blocked">Skills, commands, crons, and markdown are not available. No on-disk source is configured.</p>
+    {% else %}
+    <h1 id="agent-heading" class="agent-heading">Agent not found</h1>
+    <p class="agent-empty">No detected agent matches this key.</p>
+    <section id="agent-chats" class="agent-chats">
+      <h2>Chats</h2>
+      <p class="agent-empty">No chats for this agent.</p>
+    </section>
+    {% endif %}
+  </main>
+  <script src="/static/agent_page.js"></script>
+</body>
+</html>

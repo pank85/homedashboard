@@ -802,12 +802,14 @@ def test_sessions_list_and_enabled_form(monkeypatch, tmp_path):
     assert "super-secret-token" not in page.text
     assert "undefined" not in page.text
     panel = _panel(page.text, "panel-sessions")
-    assert "label demo" in panel
-    assert "kind pi" in panel
-    assert "workspace ws-1" in panel
-    assert "status running" in panel
-    assert "cwd /work" in panel
+    assert "<p>Name demo</p>" in panel
+    assert "<p>Agent pi</p>" in panel
+    assert "<p>Workspace ws-1</p>" in panel
+    assert "<p>Status running</p>" in panel
+    assert "<p>Folder /work</p>" in panel
     assert "ago" in panel
+    assert "Attaching that name opens the whole Herdr session, not this one chat." in panel
+    assert "Herdr session: hermes." in panel
     assert "herdr session attach hermes" in panel
     assert "Open Herdr Web" in panel
     assert 'href="/herdr/"' in panel
@@ -947,33 +949,52 @@ def test_mobile_page_nav_and_desktop_link(monkeypatch):
         page = client.get("/m")
         desktop = client.get("/")
     assert page.status_code == 200
-    assert 'data-view="mobile"' in page.text
-    assert 'href="/"' in page.text
-    nav = re.search(r'<nav[^>]*data-view-nav[^>]*>.*?</nav>', page.text, re.S)
-    assert nav is not None
-    assert nav.group(0).count("<button") == 5
-    for section in ("containers", "agents", "git", "host", "sessions"):
-        assert f'data-section="{section}"' in nav.group(0)
-    assert 'data-mobile-panel data-section="containers"' in page.text
-    assert 'data-section="agents" hidden' in page.text
-    assert 'data-section="git" hidden' in page.text
-    assert 'data-section="host" hidden' in page.text
-    assert 'data-section="sessions" hidden' in page.text
-    assert 'id="herdr-embed"' not in page.text
-    assert "<iframe" not in page.text
-    for element_id in (
-        "new-session-form",
-        "session-kind",
-        "session-cwd",
-        "session-label",
-        "session-token",
-        "session-submit",
-    ):
-        assert f'id="{element_id}"' in page.text
     assert desktop.status_code == 200
-    assert 'href="/m"' in desktop.text
-    assert "data-view-nav" not in desktop.text
-    assert 'data-view="desktop"' in desktop.text
+    for text in (page.text, desktop.text):
+        assert 'href="/m"' not in text
+        assert 'href="/"' not in text
+        assert "view-switch" not in text
+        nav = re.search(r'<nav[^>]*data-view-nav[^>]*>.*?</nav>', text, re.S)
+        assert nav is not None
+        nav_html = nav.group(0)
+        assert nav_html.count("<button") == 6
+        assert 'data-burger' in nav_html
+        assert 'aria-controls="view-menu"' in nav_html
+        assert 'aria-expanded' in nav_html
+        assert 'id="view-menu"' in nav_html
+        assert 'data-menu-open' in nav_html
+        assert 'role="tablist"' in nav_html
+        assert nav_html.count('role="tab"') == 5
+        sections = re.findall(r'data-section="([a-z]+)"', nav_html)
+        assert sections == ["host", "containers", "agents", "git", "sessions"]
+        labels = re.findall(r'<button[^>]*data-section="[^"]*"[^>]*>([^<]+)</button>', nav_html)
+        assert labels == ["Host", "Containers", "Agents", "Git", "Chats"]
+        assert nav_html.count('aria-selected="true"') == 1
+        assert nav_html.count('aria-selected="false"') == 4
+        panels = re.findall(r'<(?:section|div)[^>]*data-mobile-panel[^>]*>', text)
+        assert len(panels) == 5
+        for panel_tag in panels:
+            section = re.search(r'data-section="([a-z]+)"', panel_tag).group(1)
+            if section == "host":
+                assert "hidden" not in panel_tag
+            else:
+                assert "hidden" in panel_tag
+        for panel_id in ("panel-host", "panel-containers", "panel-agents", "panel-git", "panel-sessions"):
+            assert f'id="{panel_id}"' in text
+        assert 'id="host-body"' in text
+        assert 'id="sessions-body"' in text
+        assert 'id="herdr-frame"' in text
+        assert 'id="herdr-embed"' not in text
+        assert "<iframe" not in text
+        for element_id in (
+            "new-session-form",
+            "session-kind",
+            "session-cwd",
+            "session-label",
+            "session-token",
+            "session-submit",
+        ):
+            assert f'id="{element_id}"' in text
 
 
 def test_metrics_includes_git_when_collectors_omit_it(monkeypatch):
@@ -1064,6 +1085,8 @@ def test_linked_view_assets_have_no_innerhtml_or_http(monkeypatch):
         "agents_view.js",
         "git_view.js",
         "view_nav.js",
+        "host_view.js",
+        "sessions_view.js",
     )
     application = create_app(collectors=_unavailable_collectors())
     with TestClient(application) as client:

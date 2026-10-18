@@ -9,6 +9,7 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0 0 1rem;
+  position: relative;
 }
 
 .container-card,
@@ -28,4 +29,35 @@
 .session-card input,
 .session-card button {
   min-height: 44px;
+}
+
+@media (max-width: 767px) {
+  .view-nav [data-burger] {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .view-nav #view-menu {
+    display: none;
+    flex-direction: column;
+    gap: 0.25rem;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 20;
+    margin: 0.25rem 0 0;
+    padding: 0.5rem;
+    border: 1px solid #3d7ea6;
+    border-radius: 8px;
+    background: #0f1419;
+  }
+
+  .view-nav[data-menu-open="true"] #view-menu {
+    display: flex;
+  }
+
+  #herdr-frame {
+    display: none;
+  }
 }

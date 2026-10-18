@@ -1,6 +1,14 @@
 {% macro human(value) -%}
 {%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
 {%- endmacro %}
+{% macro agent_link_key(row) -%}
+{%- set identity = row.kind if row.kind else row.label -%}
+{%- if identity is string and identity != "" -%}
+{%- set key = identity | lower -%}
+{%- set allowed = "abcdefghijklmnopqrstuvwxyz0123456789-" -%}
+{%- if key[0] in "abcdefghijklmnopqrstuvwxyz" and (key | length) <= 32 and ((key | list) | select("in", allowed) | list | length) == (key | length) -%}{{ key }}{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
 <section id="panel-agents" class="agents-panel agents-desktop">
   <h2>Agents</h2>
   {% set agent_payload = agents if agents is mapping else {} %}
@@ -43,7 +51,9 @@
       {% set source_word = human(row.source) %}
       {% set kind_word = human(row.kind) %}
       {% set workspace_word = row.workspace_label if row.workspace_label else title %}
+      {% set link_key = agent_link_key(row) %}
       <article class="agent-card">
+      {% if link_key %}<a class="agent-card-link" href="/agents/{{ link_key }}">{% endif %}
         <h3 class="agent-title">{{ card_title }}</h3>
         <p class="agent-badges"><span class="badge badge-status status-{{ status_word }}">{{ status_word }}</span> <span class="badge badge-source source-{{ source_word }}">{{ source_word }}</span> <span class="badge badge-kind kind-{{ kind_word }}">{{ kind_word }}</span></p>
         <p class="agent-meta">workspace {{ workspace_word }} · cwd {{ human(row.cwd) }}</p>
@@ -56,6 +66,7 @@
         {% if row.source == "proc" and row.rss_human is defined and row.rss_human is not none and row.rss_human != "" %}
         <p class="agent-rss">rss {{ human(row.rss_human) }}</p>
         {% endif %}
+      {% if link_key %}</a>{% endif %}
       </article>
       {% endif %}
       {% endfor %}
