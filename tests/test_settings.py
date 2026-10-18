@@ -174,13 +174,54 @@ def test_round2_defaults():
 
 def test_round2_fields_are_appended_last_with_defaults():
     fields = dataclasses.fields(Settings)
-    assert tuple(field.name for field in fields)[-len(ROUND2_FIELDS) :] == ROUND2_FIELDS
     defaults = {field.name: field.default for field in fields}
+    for name in ROUND2_FIELDS:
+        assert name in defaults
     assert defaults["herdr_session"] == "hermes"
     assert defaults["chat_api_token"] == ""
     assert defaults["chat_cwd_allowlist"] == ()
     assert defaults["db_path"] == "/data/dashboard.db"
     assert defaults["herdr_snapshot_retention_days"] == 7
+
+
+def test_git_scan_fields_are_appended_last_with_defaults():
+    fields = dataclasses.fields(Settings)
+    git_fields = (
+        "git_scan_roots",
+        "git_scan_max_depth",
+        "git_scan_max_repos",
+    )
+    assert tuple(field.name for field in fields)[-len(git_fields) :] == git_fields
+    defaults = {field.name: field.default for field in fields}
+    assert defaults["git_scan_roots"] == ()
+    assert defaults["git_scan_max_depth"] == 3
+    assert defaults["git_scan_max_repos"] == 40
+
+
+def test_git_scan_roots_parsed_as_csv():
+    settings = load_settings({"GIT_SCAN_ROOTS": " /a , /b ,, /c "})
+    assert settings.git_scan_roots == ("/a", "/b", "/c")
+    assert load_settings({}).git_scan_roots == ()
+    assert load_settings({"GIT_SCAN_ROOTS": "  "}).git_scan_roots == ()
+
+
+def test_git_scan_depth_and_max_repos_parsed_as_int():
+    settings = load_settings(
+        {"GIT_SCAN_MAX_DEPTH": "5", "GIT_SCAN_MAX_REPOS": "12"}
+    )
+    assert settings.git_scan_max_depth == 5
+    assert settings.git_scan_max_repos == 12
+    assert load_settings({}).git_scan_max_depth == 3
+    assert load_settings({}).git_scan_max_repos == 40
+
+
+def test_git_scan_invalid_values_fall_back_without_raising():
+    for bad in ("abc", "", "   ", "x1"):
+        loaded = load_settings(
+            {"GIT_SCAN_MAX_DEPTH": bad, "GIT_SCAN_MAX_REPOS": bad}
+        )
+        assert loaded.git_scan_max_depth == 3
+        assert loaded.git_scan_max_repos == 40
 
 
 def test_legacy_keyword_construction_still_works():

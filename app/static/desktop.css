@@ -1,0 +1,30 @@
+/* Desktop-only layout. Palette stays in style.css; this file adds no colors. */
+
+.project-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.container-card,
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.git-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.git-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}

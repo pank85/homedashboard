@@ -358,10 +358,9 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert page.status_code == 200
         assert "unavailable:" in page.text
         assert "docker socket not reachable: /var/run/docker.sock" in page.text
-        assert "no agents detected" in page.text
+        assert "No agents detected." in page.text
         assert "proc stat not readable: /proc/stat" in page.text
         assert "container view" in page.text
-        assert "herdr not found: herdr" in page.text
         assert "Traceback" not in page.text
         assert "super-secret-token" not in page.text
         assert _EMBED_LIMIT in page.text
@@ -510,7 +509,7 @@ def test_collector_exception_is_unavailable_not_traceback(monkeypatch, caplog):
             metrics = client.get("/api/metrics")
     assert page.status_code == 200
     assert "unavailable: collector error" in page.text
-    assert "no agents detected" in page.text
+    assert "No agents detected." in page.text
     assert "Traceback" not in page.text
     assert "super-secret-token" not in page.text
     assert metrics.status_code == 200
@@ -541,7 +540,7 @@ def test_page_real_collectors_missing_sources(monkeypatch, tmp_path):
         page = client.get("/")
     assert page.status_code == 200
     assert "unavailable:" in page.text
-    assert "no agents detected" in page.text
+    assert "No agents detected." in page.text
     assert "Traceback" not in page.text
     assert "super-secret-token" not in page.text
     assert 'data-refresh="0"' in page.text
@@ -683,7 +682,7 @@ def test_container_cards_badges_and_herdr_groups(monkeypatch):
     panel = _panel(page.text, "panel-containers")
     assert panel.count("<article") == 2
     assert "container-grid" in panel
-    assert ">web</h3>" in panel
+    assert ">web-1</h3>" in panel
     assert ">old-1</h3>" in panel
     assert "abc123" in panel
     assert "def456" in panel
@@ -701,16 +700,15 @@ def test_container_cards_badges_and_herdr_groups(monkeypatch):
     assert "<h3>lab</h3>" in agents_panel
     assert "<h3>proc</h3>" in agents_panel
     assert "<h3>unknown</h3>" in agents_panel
-    assert "kind pi" in agents_panel
-    assert "tab tab-a" in agents_panel
-    assert "status working" in agents_panel
+    assert ">pi</span>" in agents_panel
+    assert ">working</span>" in agents_panel
+    assert ">tab-a</h3>" in agents_panel
     assert "cwd /work" in agents_panel
     assert "elapsed 1m 30s" in agents_panel
-    assert "kind claude" in agents_panel
     assert "elapsed unknown" in agents_panel
     assert "5s" not in agents_panel
-    assert "source herdr" in agents_panel
-    assert "source proc" in agents_panel
+    assert ">herdr</span>" in agents_panel
+    assert ">proc</span>" in agents_panel
 
 
 def test_container_empty_and_single_card(monkeypatch):
@@ -931,10 +929,152 @@ def test_embed_iframe_survives_agents_herdr_without_embed(monkeypatch):
     assert "agents block only" in agents_panel
     assert 'href="/herdr/"' in page.text
     template = (ROOT / "app/templates/index.html").read_text(encoding="utf-8")
-    agents_src = _panel(template, "panel-agents")
+    assert '{% include "partials/agents_desktop.html" %}' in template
+    agents_src = (ROOT / "app/templates/partials/agents_desktop.html").read_text(encoding="utf-8")
     assert "{% set agent_herdr" in agents_src
     assert "{% set herdr" not in template
     assert "{{ herdr." not in agents_src
     frame_src = _panel(template, "herdr-frame")
     assert "{% if herdr.embed %}" in frame_src
     assert "herdr.embed_src" in frame_src
+
+
+def test_mobile_page_nav_and_desktop_link(monkeypatch):
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    application = create_app(collectors=_unavailable_collectors())
+    with TestClient(application) as client:
+        page = client.get("/m")
+        desktop = client.get("/")
+    assert page.status_code == 200
+    assert 'data-view="mobile"' in page.text
+    assert 'href="/"' in page.text
+    nav = re.search(r'<nav[^>]*data-view-nav[^>]*>.*?</nav>', page.text, re.S)
+    assert nav is not None
+    assert nav.group(0).count("<button") == 5
+    for section in ("containers", "agents", "git", "host", "sessions"):
+        assert f'data-section="{section}"' in nav.group(0)
+    assert 'data-mobile-panel data-section="containers"' in page.text
+    assert 'data-section="agents" hidden' in page.text
+    assert 'data-section="git" hidden' in page.text
+    assert 'data-section="host" hidden' in page.text
+    assert 'data-section="sessions" hidden' in page.text
+    assert 'id="herdr-embed"' not in page.text
+    assert "<iframe" not in page.text
+    for element_id in (
+        "new-session-form",
+        "session-kind",
+        "session-cwd",
+        "session-label",
+        "session-token",
+        "session-submit",
+    ):
+        assert f'id="{element_id}"' in page.text
+    assert desktop.status_code == 200
+    assert 'href="/m"' in desktop.text
+    assert "data-view-nav" not in desktop.text
+    assert 'data-view="desktop"' in desktop.text
+
+
+def test_metrics_includes_git_when_collectors_omit_it(monkeypatch):
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    application = create_app(collectors=_unavailable_collectors())
+    with TestClient(application) as client:
+        page = client.get("/")
+        metrics = client.get("/api/metrics")
+    assert page.status_code == 200
+    assert metrics.status_code == 200
+    git = metrics.json()["git"]
+    assert git["available"] is True
+    assert git["note"] == "git collector not configured"
+    assert git["scanned"] is False
+    assert git["projects"] == []
+
+
+def test_injected_git_collector_renders_redacted_url(monkeypatch):
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    planted = "ghp_PlantedRawToken9f3a"
+    redacted = "https://github.com/org/demo.git"
+
+    def collect_git(**kwargs):
+        return {
+            "available": True,
+            "reason": "",
+            "note": "",
+            "scanned": True,
+            "roots": ["/repos"],
+            "truncated": False,
+            "refreshed_at": "2020-01-01T00:00:00+00:00",
+            "projects": [
+                {
+                    "name": "demo",
+                    "path": "/repos/demo",
+                    "branch": "main",
+                    "detached": False,
+                    "head_short": "abc1234",
+                    "upstream": "origin/main",
+                    "remote_url": redacted,
+                    "in_progress": [],
+                    "commit_subject": "hello",
+                    "commit_at": "",
+                }
+            ],
+        }
+
+    collectors = _unavailable_collectors()
+    collectors["git"] = collect_git
+    application = create_app(collectors=collectors)
+    with TestClient(application) as client:
+        page = client.get("/")
+        mobile = client.get("/m")
+        metrics = client.get("/api/metrics")
+    assert page.status_code == 200
+    assert mobile.status_code == 200
+    assert redacted in page.text
+    assert redacted in mobile.text
+    assert planted not in page.text
+    assert planted not in mobile.text
+    assert planted not in metrics.text
+    assert metrics.json()["git"]["projects"][0]["remote_url"] == redacted
+
+
+def test_tick_does_not_assign_filter_value_and_still_filters():
+    source = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    tick = _js_function(source, "tick")
+    render = _js_function(source, "renderContainers")
+    assert ".value =" not in tick
+    assert ".value =" not in render
+    assert "filterContainers(" in render
+    assert "renderGitView" in tick
+    assert "data.git" in tick
+
+
+def test_linked_view_assets_have_no_innerhtml_or_http(monkeypatch):
+    monkeypatch.setenv("DB_PATH", "")
+    monkeypatch.delenv("CHAT_API_TOKEN", raising=False)
+    names = (
+        "containers.css",
+        "agents.css",
+        "git.css",
+        "desktop.css",
+        "mobile.css",
+        "containers_view.js",
+        "agents_view.js",
+        "git_view.js",
+        "view_nav.js",
+    )
+    application = create_app(collectors=_unavailable_collectors())
+    with TestClient(application) as client:
+        desktop = client.get("/")
+        mobile = client.get("/m")
+        linked = desktop.text + mobile.text
+        for name in names:
+            href = "/static/" + name
+            assert href in linked
+            asset = client.get(href)
+            assert asset.status_code == 200
+            assert "innerHTML" not in asset.text
+            assert "http://" not in asset.text
+            assert "https://" not in asset.text

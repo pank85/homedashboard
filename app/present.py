@@ -95,6 +95,10 @@ def _present_agent(row: object) -> object:
     out = dict(row)
     if "elapsed_seconds" in row:
         out["elapsed_human"] = format_duration(row["elapsed_seconds"])
+    if "rss_bytes" in row:
+        out["rss_human"] = format_bytes(row["rss_bytes"])
+    if "cpu_percent" in row:
+        out["cpu_percent_human"] = format_percent(row["cpu_percent"])
     return out
 
 
@@ -116,8 +120,24 @@ def _present_list(container: dict, key: str, presenter) -> dict:
     return container
 
 
+def _present_project(row: object) -> object:
+    if not isinstance(row, dict):
+        return row
+    out = dict(row)
+    if "commit_at" in row:
+        out["commit_relative"] = format_relative(row["commit_at"])
+    return out
+
+
 def _present(payload: dict) -> dict:
     out = dict(payload)
+    git = out.get("git")
+    if isinstance(git, dict):
+        projects = git.get("projects")
+        if isinstance(projects, list):
+            git = dict(git)
+            git["projects"] = [_present_project(project) for project in projects]
+            out["git"] = git
     containers = out.get("containers")
     if isinstance(containers, dict):
         out["containers"] = _present_list(dict(containers), "containers", _present_container)

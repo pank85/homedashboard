@@ -1,0 +1,31 @@
+/* Mobile-only layout. Toggles panels with [hidden] and keeps tap targets >= 44px. */
+
+[hidden] {
+  display: none !important;
+}
+
+.view-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.container-card,
+.agent-card,
+.session-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.view-nav button,
+.filters input,
+.filters select,
+#new-session-form input,
+#new-session-form select,
+#new-session-form button,
+.session-card input,
+.session-card button {
+  min-height: 44px;
+}

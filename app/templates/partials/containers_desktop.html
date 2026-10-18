@@ -1,0 +1,119 @@
+{% macro human(value) -%}
+{%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+{% macro health_word(value) -%}
+{%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}none{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+{% macro bar_width(value) -%}
+{%- if value is number -%}
+{%- if value < 0 -%}0{%- elif value > 100 -%}100{%- else -%}{{ value }}{%- endif -%}
+{%- else -%}0{%- endif -%}
+{%- endmacro %}
+{% set rows = containers.containers if containers.containers is iterable and containers.containers is not string else [] %}
+{% set counts = namespace(running=0, stopped=0, unhealthy=0) %}
+{% for row in rows %}
+{% if row.state == "running" %}
+{% set counts.running = counts.running + 1 %}
+{% else %}
+{% set counts.stopped = counts.stopped + 1 %}
+{% endif %}
+{% if row.health == "unhealthy" or row.state == "restarting" %}
+{% set counts.unhealthy = counts.unhealthy + 1 %}
+{% endif %}
+{% endfor %}
+{% set seen = namespace(names=[]) %}
+{% for row in rows %}
+{% set project = row.compose_project if row.compose_project is string and row.compose_project != "" else "Other" %}
+{% if project not in seen.names %}
+{% set seen.names = seen.names + [project] %}
+{% endif %}
+{% endfor %}
+{% set folded = namespace(items=[]) %}
+{% for name in seen.names %}
+{% if name != "Other" %}
+{% set folded.items = folded.items + [{"name": name, "key": name.casefold()}] %}
+{% endif %}
+{% endfor %}
+{% set ordered = folded.items | sort(attribute="key", case_sensitive=true) %}
+{% set projects = namespace(names=[]) %}
+{% for item in ordered %}
+{% set projects.names = projects.names + [item.name] %}
+{% endfor %}
+{% if "Other" in seen.names %}
+{% set projects.names = projects.names + ["Other"] %}
+{% endif %}
+<section id="panel-containers">
+  <h2>Containers</h2>
+  <div class="filters">
+    <label for="container-filter-text">Filter
+      <input id="container-filter-text" type="text" autocomplete="off">
+    </label>
+    <label for="container-filter-state">State
+      <select id="container-filter-state">
+        <option value="All">All</option>
+        <option value="Running">Running</option>
+        <option value="Stopped">Stopped</option>
+      </select>
+    </label>
+    <label for="container-filter-hide-healthy">
+      <input id="container-filter-hide-healthy" type="checkbox">
+      Hide healthy
+    </label>
+    <label for="container-filter-sort">Sort
+      <select id="container-filter-sort">
+        <option value="status" selected>status</option>
+        <option value="name">name</option>
+        <option value="cpu">cpu</option>
+        <option value="memory">memory</option>
+      </select>
+    </label>
+    <p id="container-filter-count">{% if containers.available %}{{ rows|length }} of {{ rows|length }} shown{% else %}0 of 0 shown{% endif %}</p>
+  </div>
+  <p id="container-summary">{{ counts.running }} running · {{ counts.stopped }} stopped · {{ counts.unhealthy }} unhealthy</p>
+  <div id="containers-body">
+    {% if not containers.available %}
+    <p>unavailable: {{ containers.reason }}</p>
+    {% elif not rows %}
+    <p>No containers.</p>
+    {% else %}
+    {% for project in projects.names %}
+    <div class="project-group">
+      <h3 class="project-heading">{{ project }}</h3>
+      <div class="container-grid">
+        {% for row in rows %}
+        {% set row_project = row.compose_project if row.compose_project is string and row.compose_project != "" else "Other" %}
+        {% if row_project == project %}
+        {% set subtitle = row.compose_service if row.compose_service else (row.image_short if row.image_short else (row.image if row.image else "")) %}
+        {% set image = row.image_short if row.image_short else (row.image if row.image else "unknown") %}
+        {% set state_word = human(row.state_label if row.state_label else row.state) %}
+        {% set health = health_word(row.health_label if row.health_label is defined else row.health) %}
+        {% set meter = namespace(memory=0) %}
+        {% if row.memory_percent is number %}
+        {% set meter.memory = row.memory_percent %}
+        {% elif row.memory_used_bytes is number and row.memory_limit_bytes is number and row.memory_limit_bytes > 0 %}
+        {% set meter.memory = row.memory_used_bytes / row.memory_limit_bytes * 100 %}
+        {% endif %}
+        <article class="container-card">
+          <h3>{{ human(row.name) }}</h3>
+          {% if subtitle %}<p class="container-subtitle">{{ subtitle }}</p>{% endif %}
+          <p><span class="badge state-{{ state_word }}">{{ state_word }}</span> <span class="badge health-{{ health }}">{{ health }}</span></p>
+          <p>uptime {{ human(row.uptime_human) }}</p>
+          <p>restarts {{ human(row.restart_count) }}</p>
+          <p>cpu {{ human(row.cpu_percent_human) }}</p>
+          <div class="meter" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
+          <p>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</p>
+          <div class="meter" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill" style="width: {{ bar_width(meter.memory) }}%"></span></div>
+          <details>
+            <summary>Details</summary>
+            <p>{{ image }}</p>
+            <p>id {{ human(row.id_short) }}</p>
+          </details>
+        </article>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</section>

@@ -13,6 +13,7 @@ The page is server-rendered (FastAPI, Uvicorn, Jinja2) with a small amount of va
 | Endpoint | Role |
 | --- | --- |
 | `GET /` | The dashboard page |
+| `GET /m` | Mobile dashboard page. Same payload as `GET /`. |
 | `GET /api/health` | Liveness. Always 200 when the process is up. Does not call collectors. |
 | `GET /api/metrics` | Full dashboard payload |
 | `GET /api/containers` | Containers panel |
@@ -23,6 +24,8 @@ The page is server-rendered (FastAPI, Uvicorn, Jinja2) with a small amount of va
 | `POST /api/sessions/{id}/archive` | Mark this dashboard's session `archived`. Token-gated. No herdr call. |
 
 Agents come from herdr and, as a fallback, a `/proc` process scan. Both sources may be combined. Rows are not deduped; `source` distinguishes them. Empty from both is `no agents detected`, not an error.
+
+Git projects appear only when `GIT_SCAN_ROOTS` is set, and the collector reads files rather than running git.
 
 ## Quick start
 
@@ -166,6 +169,9 @@ The app reads these through `load_settings`. Defaults are generic. No hostnames,
 | `CHAT_CWD_ALLOWLIST` | empty | csv. Absolute path prefixes a new session may start in. Empty rejects every create (fail closed). No host path in this file. |
 | `DB_PATH` | `/data/dashboard.db` | str. Container path, not a host path. Omitting the key uses the default; setting it blank or whitespace **disables** persistence, the one key where blank does not mean default. The page still loads. |
 | `HERDR_SNAPSHOT_RETENTION_DAYS` | `7` | int. Snapshot rows older than this are deleted on the next write. Invalid or `< 1` falls back to `7`; `0` does not mean "keep forever". |
+| `GIT_SCAN_ROOTS` | empty | csv. Paths inside the container. Empty means do not scan. |
+| `GIT_SCAN_MAX_DEPTH` | `3` | int. Invalid falls back to `3`. |
+| `GIT_SCAN_MAX_REPOS` | `40` | int. Invalid falls back to `40`. |
 | `HERDR_HOST_CONFIG_SOURCE` | empty | compose-only. App does not read it. Host directory for the commented default-path mount at `/root/.config/herdr`. Empty means do not use. |
 | `DASHBOARD_DATA_SOURCE` | empty | compose-only. App does not read it. Host directory for the commented `/data` bind. |
 

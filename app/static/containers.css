@@ -1,0 +1,73 @@
+#panel-containers {
+  background: #1a2332;
+  color: #e7ecf1;
+}
+
+#panel-containers .filters input,
+#panel-containers .filters select,
+#panel-containers .container-card summary {
+  min-height: 44px;
+  color: #e7ecf1;
+  background: #0f1419;
+}
+
+.project-group {
+  background: #0f1419;
+  color: #e7ecf1;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.container-card {
+  background: #1a2332;
+  color: #e7ecf1;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.container-subtitle,
+.project-heading {
+  color: #e7ecf1;
+}
+
+.container-scan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.container-scan h3 {
+  margin: 0;
+}
+
+.badge.state-running,
+.badge.health-healthy {
+  color: #3dd68c;
+}
+
+.badge.state-exited,
+.badge.state-restarting,
+.badge.health-unhealthy {
+  color: #f07178;
+}
+
+.badge.state-paused,
+.badge.state-created,
+.badge.state-unknown,
+.badge.health-none {
+  color: #e6b35a;
+}
+
+.meter {
+  background: #0f1419;
+}
+
+.meter-fill {
+  background: #3dd68c;
+}
+
+#container-summary {
+  color: #e7ecf1;
+}

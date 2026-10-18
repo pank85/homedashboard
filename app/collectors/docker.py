@@ -264,6 +264,7 @@ def _row_from_list(item: dict) -> dict:
         "image": image if isinstance(image, str) else "",
         "state": state if isinstance(state, str) else "",
         "compose_service": _compose_service_from_labels(item.get("Labels")),
+        "compose_project": _compose_project_from_labels(item.get("Labels")),
         "health": None,
         "uptime_seconds": None,
         "restart_count": 0,
@@ -274,10 +275,18 @@ def _row_from_list(item: dict) -> dict:
 
 
 def _compose_service_from_labels(labels: object) -> str:
+    return _compose_label(labels, "com.docker.compose.service")
+
+
+def _compose_project_from_labels(labels: object) -> str:
+    return _compose_label(labels, "com.docker.compose.project")
+
+
+def _compose_label(labels: object, key: str) -> str:
     if not isinstance(labels, dict):
         return ""
-    service = labels.get("com.docker.compose.service")
-    return service if isinstance(service, str) else ""
+    value = labels.get(key)
+    return value if isinstance(value, str) else ""
 
 
 def _apply_inspect(row: dict, inspected: dict, moment: datetime) -> None:
@@ -305,6 +314,9 @@ def _apply_inspect(row: dict, inspected: dict, moment: datetime) -> None:
         service = _compose_service_from_labels(config.get("Labels"))
         if service:
             row["compose_service"] = service
+        project = _compose_project_from_labels(config.get("Labels"))
+        if project:
+            row["compose_project"] = project
 
 
 def _memory_bytes(stats: dict) -> tuple[int | None, int | None]:

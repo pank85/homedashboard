@@ -307,12 +307,14 @@ def create_app(
         if resolved is None:
             from app.collectors.agents import collect_agents
             from app.collectors.docker import collect_containers
+            from app.collectors.git import collect_git
             from app.collectors.host import collect_host
 
             resolved = {
                 "containers": collect_containers,
                 "agents": collect_agents,
                 "host": collect_host,
+                "git": collect_git,
             }
         return resolved
 
@@ -359,6 +361,38 @@ def create_app(
         except Exception:
             _LOGGER.exception("host collector failed")
             return _host_fallback(generated_at)
+
+    def call_git(generated_at: str) -> dict[str, Any]:
+        collect = get_collectors().get("git")
+        if collect is None:
+            return {
+                "available": True,
+                "reason": "",
+                "note": "git collector not configured",
+                "scanned": False,
+                "roots": [],
+                "truncated": False,
+                "refreshed_at": "",
+                "projects": [],
+            }
+        try:
+            return collect(
+                roots=settings.git_scan_roots,
+                max_depth=settings.git_scan_max_depth,
+                max_repos=settings.git_scan_max_repos,
+            )
+        except Exception:
+            _LOGGER.exception("git collector failed")
+            return {
+                "available": False,
+                "reason": "collector error",
+                "note": "",
+                "scanned": False,
+                "roots": [],
+                "truncated": False,
+                "refreshed_at": generated_at,
+                "projects": [],
+            }
 
     def herdr_fields() -> tuple[str, str]:
         try:
@@ -563,6 +597,7 @@ def create_app(
         containers = call_containers(generated_at)
         agents = call_agents(generated_at)
         host = call_host(generated_at)
+        git = call_git(generated_at)
         href, embed_src = herdr_fields()
         try:
             payload = build_dashboard(
@@ -575,6 +610,7 @@ def create_app(
                 herdr_mode=settings.herdr_mode,
                 refresh_seconds=settings.refresh_seconds,
                 generated_at=generated_at,
+                git=git,
             )
         except Exception:
             _LOGGER.exception("dashboard build failed")
@@ -591,6 +627,7 @@ def create_app(
                 "containers": containers,
                 "agents": agents,
                 "host": host,
+                "git": git,
             }
         try:
             sync_herdr(agents)
@@ -839,6 +876,14 @@ def create_app(
         return templates.TemplateResponse(
             request=request,
             name="index.html",
+            context=dashboard(),
+        )
+
+    @app.get("/m")
+    def mobile(request: Request):
+        return templates.TemplateResponse(
+            request=request,
+            name="mobile.html",
             context=dashboard(),
         )
 

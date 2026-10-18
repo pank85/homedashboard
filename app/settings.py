@@ -68,6 +68,9 @@ class Settings:
     chat_cwd_allowlist: tuple[str, ...] = ()
     db_path: str = DEFAULT_DB_PATH
     herdr_snapshot_retention_days: int = DEFAULT_SNAPSHOT_RETENTION_DAYS
+    git_scan_roots: tuple[str, ...] = ()
+    git_scan_max_depth: int = 3
+    git_scan_max_repos: int = 40
 
 
 def _parse_bool(value: str | None, default: bool) -> bool:
@@ -175,6 +178,9 @@ def load_settings(environ: dict[str, str] | None = None) -> Settings:
         herdr_snapshot_retention_days=_parse_retention_days(
             env.get("HERDR_SNAPSHOT_RETENTION_DAYS")
         ),
+        git_scan_roots=_parse_csv(env.get("GIT_SCAN_ROOTS"), ()),
+        git_scan_max_depth=_parse_int(env.get("GIT_SCAN_MAX_DEPTH"), 3),
+        git_scan_max_repos=_parse_int(env.get("GIT_SCAN_MAX_REPOS"), 40),
     )
 
 

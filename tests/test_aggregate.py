@@ -65,3 +65,41 @@ def test_signature_has_no_token_parameter():
     params = inspect.signature(build_dashboard).parameters
     assert "token" not in params
     assert "herdr_web_token" not in params
+
+
+UNSET_GIT = {
+    "available": True,
+    "reason": "",
+    "note": "git collector not configured",
+    "scanned": False,
+    "roots": [],
+    "truncated": False,
+    "refreshed_at": "",
+    "projects": [],
+}
+
+
+def test_git_omitted_is_unset_object():
+    payload = build_dashboard(**_kwargs())
+    assert payload["git"] == UNSET_GIT
+
+
+def test_git_explicit_dict_passes_through():
+    git = {
+        "available": True,
+        "reason": "",
+        "note": "",
+        "scanned": True,
+        "roots": ["/srv"],
+        "truncated": False,
+        "refreshed_at": "2026-10-17T11:26:03Z",
+        "projects": [{"name": "demo"}],
+    }
+    payload = build_dashboard(**_kwargs(git=git))
+    assert payload["git"] is git
+
+
+def test_git_non_dict_becomes_unset_object():
+    for value in (None, [], "", 0, ["x"]):
+        payload = build_dashboard(**_kwargs(git=value))
+        assert payload["git"] == UNSET_GIT

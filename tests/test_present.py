@@ -128,6 +128,77 @@ def test_present_agent_elapsed_human():
     assert rows[1]["elapsed_human"] == "unknown"
 
 
+def test_present_agent_adds_rss_and_cpu_human():
+    payload = {
+        "agents": {
+            "agents": [
+                {
+                    "source": "proc",
+                    "rss_bytes": 524288000,
+                    "cpu_percent": 12.5,
+                },
+                {
+                    "source": "proc",
+                    "rss_bytes": None,
+                    "cpu_percent": None,
+                },
+            ]
+        }
+    }
+    rows = present_dashboard(payload)["agents"]["agents"]
+    assert rows[0]["rss_human"] == "500.0 MiB"
+    assert rows[0]["cpu_percent_human"] == "12.5%"
+    assert rows[0]["rss_bytes"] == 524288000
+    assert rows[0]["cpu_percent"] == 12.5
+    assert rows[1]["rss_human"] == "unknown"
+    assert rows[1]["cpu_percent_human"] == "unknown"
+
+
+def test_present_agent_omits_rss_and_cpu_human_when_absent():
+    payload = {"agents": {"agents": [{"source": "herdr"}]}}
+    row = present_dashboard(payload)["agents"]["agents"][0]
+    assert "rss_human" not in row
+    assert "cpu_percent_human" not in row
+
+
+def test_present_git_projects_add_commit_relative():
+    payload = {
+        "git": {
+            "available": True,
+            "projects": [
+                {
+                    "name": "repo",
+                    "commit_at": "2024-06-01T00:00:00Z",
+                },
+                {
+                    "name": "packed",
+                    "commit_at": "",
+                },
+            ],
+        }
+    }
+    out = present_dashboard(payload)
+    projects = out["git"]["projects"]
+    assert projects[0]["commit_relative"].endswith("ago")
+    assert projects[1]["commit_relative"] == "unknown"
+    assert projects[0]["commit_at"] == "2024-06-01T00:00:00Z"
+
+
+def test_present_git_missing_key_unchanged():
+    out = present_dashboard({"generated_at": "2024-06-01T00:00:00Z"})
+    assert "git" not in out
+
+
+def test_present_git_non_dict_unchanged():
+    out = present_dashboard({"git": None})
+    assert out == {"git": None}
+
+
+def test_present_git_non_list_projects_unchanged():
+    out = present_dashboard({"git": {"projects": None}})
+    assert out["git"] == {"projects": None}
+
+
 def test_present_sessions_relative_fields():
     out = present_dashboard(_payload())
     row = out["sessions"]["sessions"][0]

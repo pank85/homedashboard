@@ -1,0 +1,90 @@
+#panel-agents {
+  background: #0f1419;
+  color: #e7ecf1;
+}
+
+#panel-agents h2,
+#panel-agents h3,
+#panel-agents p {
+  color: #e7ecf1;
+}
+
+#panel-agents .herdr-summary,
+#panel-agents .agent-card {
+  background: #1a2332;
+  color: #e7ecf1;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+#panel-agents .herdr-summary {
+  margin: 0 0 0.5rem;
+}
+
+#panel-agents .herdr-reason {
+  color: #e6b35a;
+}
+
+#panel-agents .herdr-unavailable {
+  color: #f07178;
+}
+
+#panel-agents .workspace-group {
+  margin: 0 0 1rem;
+}
+
+#panel-agents .agent-card {
+  margin: 0 0 0.75rem;
+}
+
+#panel-agents .agent-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+#panel-agents .badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #0f1419;
+  color: #e7ecf1;
+  font-weight: 700;
+}
+
+#panel-agents .badge.status-working,
+#panel-agents .badge.status-running,
+#panel-agents .badge.status-ok {
+  color: #3dd68c;
+}
+
+#panel-agents .badge.status-idle,
+#panel-agents .badge.status-unknown,
+#panel-agents .badge.status-paused {
+  color: #e6b35a;
+}
+
+#panel-agents .badge.status-error,
+#panel-agents .badge.status-failed,
+#panel-agents .badge.status-exited {
+  color: #f07178;
+}
+
+#panel-agents.agents-desktop .workspace-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#panel-agents.agents-mobile .agent-card,
+#panel-agents.agents-mobile .herdr-summary,
+#panel-agents.agents-mobile .agent-badges {
+  width: 100%;
+}
+
+#panel-agents.agents-mobile .agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}

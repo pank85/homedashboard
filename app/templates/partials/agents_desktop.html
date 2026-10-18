@@ -1,0 +1,66 @@
+{% macro human(value) -%}
+{%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+<section id="panel-agents" class="agents-panel agents-desktop">
+  <h2>Agents</h2>
+  {% set agent_payload = agents if agents is mapping else {} %}
+  {% set agent_herdr = agent_payload.herdr if agent_payload.herdr is mapping else {} %}
+  <div id="herdr-block">
+    <p class="herdr-summary">reachable {{ "true" if agent_herdr.reachable else "false" }} · version {{ human(agent_herdr.version) }} · session {{ human(agent_herdr.session) }} · workspaces {{ agent_herdr.workspace_count if agent_herdr.workspace_count is number else 0 }} · tabs {{ agent_herdr.tab_count if agent_herdr.tab_count is number else 0 }} · agents {{ agent_herdr.agent_count if agent_herdr.agent_count is number else 0 }}</p>
+    {% if agent_herdr.reason %}
+    <p class="herdr-reason">{{ agent_herdr.reason }}</p>
+    {% endif %}
+    {% if not agent_herdr.reachable %}
+    <p class="herdr-unavailable">unavailable: {{ agent_herdr.reason if agent_herdr.reason else "herdr unavailable" }}</p>
+    {% endif %}
+  </div>
+  <div id="agents-body">
+    {% set agent_rows = agent_payload.agents if agent_payload.agents is iterable and agent_payload.agents is not string else [] %}
+    {% set agent_note = agent_payload.note if agent_payload.note else "" %}
+    {% if agent_rows|length == 0 or agent_note == "no agents detected" %}
+    <p class="agents-empty">No agents detected.</p>
+    {% else %}
+    {% if agent_note %}
+    <p class="agents-note">{{ agent_note }}</p>
+    {% endif %}
+    {% set groups = namespace(titles=[]) %}
+    {% for agent in agent_rows %}
+    {% set row = agent if agent is mapping else {} %}
+    {% set title = row.workspace_label if row.workspace_label else ("proc" if row.source == "proc" else "unknown") %}
+    {% if title not in groups.titles %}
+    {% set groups.titles = groups.titles + [title] %}
+    {% endif %}
+    {% endfor %}
+    {% for title in groups.titles %}
+    <div class="workspace-group">
+      <h3>{{ title }}</h3>
+      {% for agent in agent_rows %}
+      {% set row = agent if agent is mapping else {} %}
+      {% set agent_title = row.workspace_label if row.workspace_label else ("proc" if row.source == "proc" else "unknown") %}
+      {% if agent_title == title %}
+      {% set card_title = row.tab_label if row.tab_label else (row.kind if row.kind else (row.agent if row.agent else "unknown")) %}
+      {% set status_word = human(row.status) %}
+      {% set source_word = human(row.source) %}
+      {% set kind_word = human(row.kind) %}
+      {% set workspace_word = row.workspace_label if row.workspace_label else title %}
+      <article class="agent-card">
+        <h3 class="agent-title">{{ card_title }}</h3>
+        <p class="agent-badges"><span class="badge badge-status status-{{ status_word }}">{{ status_word }}</span> <span class="badge badge-source source-{{ source_word }}">{{ source_word }}</span> <span class="badge badge-kind kind-{{ kind_word }}">{{ kind_word }}</span></p>
+        <p class="agent-meta">workspace {{ workspace_word }} · cwd {{ human(row.cwd) }}</p>
+        {% if row.elapsed_source == "herdr" %}
+        <p class="agent-elapsed">elapsed {{ human(row.elapsed_human) }}</p>
+        {% endif %}
+        {% if row.source == "proc" and row.cpu_percent_human is defined and row.cpu_percent_human is not none and row.cpu_percent_human != "" %}
+        <p class="agent-cpu">cpu {{ human(row.cpu_percent_human) }}</p>
+        {% endif %}
+        {% if row.source == "proc" and row.rss_human is defined and row.rss_human is not none and row.rss_human != "" %}
+        <p class="agent-rss">rss {{ human(row.rss_human) }}</p>
+        {% endif %}
+      </article>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+</section>

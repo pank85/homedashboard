@@ -6,8 +6,12 @@
   <meta name="color-scheme" content="dark">
   <title>Dashboard</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/containers.css">
+  <link rel="stylesheet" href="/static/agents.css">
+  <link rel="stylesheet" href="/static/git.css">
+  <link rel="stylesheet" href="/static/desktop.css">
 </head>
-<body data-refresh="{{ refresh_seconds }}">
+<body data-view="desktop" data-refresh="{{ refresh_seconds }}">
   {% macro human(value) -%}
   {%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
   {%- endmacro %}
@@ -21,6 +25,7 @@
   {%- endmacro %}
   <header>
     <h1>Dashboard</h1>
+    <p class="view-switch"><a href="/m">Mobile</a></p>
     <p class="updated">Last updated <time id="last-updated">{{ generated_at }}</time></p>
     <div class="herdr-launch">
       {% if herdr.href %}
@@ -33,112 +38,9 @@
   </header>
 
   <main>
-    <section id="panel-containers">
-      <h2>Containers</h2>
-      <div class="filters">
-        <label for="container-filter-text">Filter
-          <input id="container-filter-text" type="text" autocomplete="off">
-        </label>
-        <label for="container-filter-state">State
-          <select id="container-filter-state">
-            <option value="All">All</option>
-            <option value="Running">Running</option>
-            <option value="Stopped">Stopped</option>
-          </select>
-        </label>
-        <label for="container-filter-hide-healthy">
-          <input id="container-filter-hide-healthy" type="checkbox">
-          Hide healthy
-        </label>
-        <p id="container-filter-count">{% if containers.available %}{{ containers.containers|length }} of {{ containers.containers|length }} shown{% else %}0 of 0 shown{% endif %}</p>
-      </div>
-      <div id="containers-body">
-        {% if not containers.available %}
-        <p>unavailable: {{ containers.reason }}</p>
-        {% elif not containers.containers %}
-        <p>No containers.</p>
-        {% else %}
-        <div class="container-grid">
-          {% for row in containers.containers %}
-          {% set title = row.compose_service if row.compose_service else (row.name if row.name else "unknown") %}
-          {% set image = row.image_short if row.image_short else (row.image if row.image else "unknown") %}
-          {% set state_word = human(row.state_label) %}
-          {% set health = health_word(row.health_label) %}
-          {% set meter = namespace(memory=0) %}
-          {% if row.memory_percent is number %}
-          {% set meter.memory = row.memory_percent %}
-          {% elif row.memory_used_bytes is number and row.memory_limit_bytes is number and row.memory_limit_bytes > 0 %}
-          {% set meter.memory = row.memory_used_bytes / row.memory_limit_bytes * 100 %}
-          {% endif %}
-          <article class="container-card">
-            <h3>{{ title }}</h3>
-            <p>id {{ human(row.id_short) }}</p>
-            <p>{{ image }}</p>
-            <p><span class="badge state-{{ state_word }}">{{ state_word }}</span> <span class="badge health-{{ health }}">{{ health }}</span></p>
-            <p>uptime {{ human(row.uptime_human) }}</p>
-            <p>restarts {{ human(row.restart_count) }}</p>
-            <p>cpu {{ human(row.cpu_percent_human) }}</p>
-            <div class="meter" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
-            <p>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</p>
-            <div class="meter" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill" style="width: {{ bar_width(meter.memory) }}%"></span></div>
-          </article>
-          {% endfor %}
-        </div>
-        {% endif %}
-      </div>
-    </section>
-
-    <section id="panel-agents">
-      <h2>Agents</h2>
-      {% set agent_herdr = agents.herdr if agents.herdr is mapping else {} %}
-      <div id="herdr-block">
-        <p>reachable {{ "true" if agent_herdr.reachable else "false" }}</p>
-        <p>version {{ human(agent_herdr.version) }}</p>
-        <p>session {{ human(agent_herdr.session) }}</p>
-        <p>workspaces {{ agent_herdr.workspace_count if agent_herdr.workspace_count is number else 0 }}</p>
-        <p>tabs {{ agent_herdr.tab_count if agent_herdr.tab_count is number else 0 }}</p>
-        <p>agents {{ agent_herdr.agent_count if agent_herdr.agent_count is number else 0 }}</p>
-        {% if agent_herdr.reason %}
-        <p>{{ agent_herdr.reason }}</p>
-        {% endif %}
-        {% if not agent_herdr.reachable %}
-        <p>unavailable: {{ agent_herdr.reason if agent_herdr.reason else "herdr unavailable" }}</p>
-        {% endif %}
-      </div>
-      <div id="agents-body">
-        {% for source in agents.sources %}
-        <p>source {{ source.name }} used {{ "true" if source.used else "false" }} refreshed_at {{ source.refreshed_at }}{% if source.error %} error {{ source.error }}{% endif %}</p>
-        {% endfor %}
-        {% if agents.note %}
-        <p>{{ agents.note }}</p>
-        {% endif %}
-        {% set groups = namespace(titles=[]) %}
-        {% for agent in agents.agents %}
-        {% set title = agent.workspace_label if agent.workspace_label else ("proc" if agent.source == "proc" else "unknown") %}
-        {% if title not in groups.titles %}
-        {% set groups.titles = groups.titles + [title] %}
-        {% endif %}
-        {% endfor %}
-        {% for title in groups.titles %}
-        <div class="workspace-group">
-          <h3>{{ title }}</h3>
-          {% for agent in agents.agents %}
-          {% set agent_title = agent.workspace_label if agent.workspace_label else ("proc" if agent.source == "proc" else "unknown") %}
-          {% if agent_title == title %}
-          <article>
-            <p>kind {{ human(agent.kind) }}</p>
-            <p>workspace {{ agent.workspace_label if agent.workspace_label else title }}</p>
-            <p>tab {{ human(agent.tab_label) }}</p>
-            <p>status {{ human(agent.status) }}</p>
-            <p>cwd {{ human(agent.cwd) }}</p>
-            <p>elapsed {{ agent.elapsed_human if agent.elapsed_source == "herdr" and agent.elapsed_human else "unknown" }}</p>
-          </article>
-          {% endif %}
-          {% endfor %}
-        </div>
-        {% endfor %}
-      </div>
-    </section>
+    {% include "partials/containers_desktop.html" %}
+    {% include "partials/agents_desktop.html" %}
+    {% include "partials/git_desktop.html" %}
 
     <section id="panel-host">
       <h2>Host</h2>
@@ -227,6 +129,10 @@
   </section>
 
   <script src="/static/container_filters.js"></script>
+  <script src="/static/containers_view.js"></script>
+  <script src="/static/agents_view.js"></script>
+  <script src="/static/git_view.js"></script>
+  <script src="/static/view_nav.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

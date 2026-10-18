@@ -42,77 +42,26 @@
     return typeof value === "number" && isFinite(value);
   }
 
-  function clampPercent(value) {
-    if (!finiteNumber(value)) {
-      return 0;
-    }
-    if (value < 0) {
-      return 0;
-    }
-    if (value > 100) {
-      return 100;
-    }
-    return value;
+  function pageView() {
+    return body.getAttribute("data-view") || "desktop";
   }
 
-  function cardTitle(row) {
-    if (typeof row.compose_service === "string" && row.compose_service !== "") {
-      return row.compose_service;
-    }
-    if (typeof row.name === "string" && row.name !== "") {
-      return row.name;
-    }
-    return "unknown";
-  }
-
-  function imageText(row) {
-    if (typeof row.image_short === "string" && row.image_short !== "") {
-      return row.image_short;
-    }
-    if (typeof row.image === "string" && row.image !== "") {
-      return row.image;
-    }
-    return "unknown";
-  }
-
-  function memoryWidth(row) {
-    if (finiteNumber(row.memory_percent)) {
-      return clampPercent(row.memory_percent);
-    }
-    if (finiteNumber(row.memory_used_bytes) && finiteNumber(row.memory_limit_bytes) && row.memory_limit_bytes > 0) {
-      return clampPercent(row.memory_used_bytes / row.memory_limit_bytes * 100);
-    }
-    return 0;
-  }
-
-  function addMeter(parent, label, width) {
-    var meter = add(parent, "div", null, "meter");
-    meter.setAttribute("role", "img");
-    meter.setAttribute("aria-label", label);
-    var fill = add(meter, "span", null, "meter-fill");
-    fill.style.width = clampPercent(width) + "%";
-  }
-
-  function renderContainerCard(grid, row) {
-    var stateWord = human(row.state_label);
-    var healthWord = row.health_label === undefined || row.health_label === null || row.health_label === "" ? "none" : human(row.health_label);
-    var cpuLabel = human(row.cpu_percent_human);
-    var used = human(row.memory_used_human);
-    var limit = human(row.memory_limit_human);
-    var card = add(grid, "article", null, "container-card");
-    add(card, "h3", cardTitle(row));
-    add(card, "p", "id " + human(row.id_short));
-    add(card, "p", imageText(row));
-    var badges = add(card, "p");
-    add(badges, "span", stateWord, "badge state-" + stateWord);
-    badges.appendChild(document.createTextNode(" "));
-    add(badges, "span", healthWord, "badge health-" + healthWord);
-    add(card, "p", "uptime " + human(row.uptime_human));
-    add(card, "p", "restarts " + human(row.restart_count));
-    add(card, "p", "cpu " + cpuLabel);
-    addMeter(card, "cpu " + cpuLabel, row.cpu_percent);
-    add(card, "p", "memory " + used + " / " + limit);
-    addMeter(card, "memory " + used + " / " + limit, memoryWidth(row));
+  function containerSummary(rows) {
+    var running = 0;
+    var stopped = 0;
+    var unhealthy = 0;
+    rows.forEach(function (row) {
+      row = row || {};
+      if (row.state === "running") {
+        running += 1;
+      } else {
+        stopped += 1;
+      }
+      if (row.health === "unhealthy" || row.state === "restarting") {
+        unhealthy += 1;
+      }
+    });
+    return running + " running · " + stopped + " stopped · " + unhealthy + " unhealthy";
   }
 
   function renderContainers(data) {
@@ -120,38 +69,52 @@
     if (!root) {
       return;
     }
-    clear(root);
     data = data || {};
     lastContainers = data;
     var rows = data.containers || [];
+    var summary = document.getElementById("container-summary");
+    if (summary) {
+      summary.textContent = containerSummary(rows);
+    }
     var textNode = document.getElementById("container-filter-text");
     var stateNode = document.getElementById("container-filter-state");
     var hideNode = document.getElementById("container-filter-hide-healthy");
+    var sortNode = document.getElementById("container-filter-sort");
     var text = textNode ? textNode.value : "";
     var state = stateNode && stateNode.value ? stateNode.value : "All";
     var hideHealthy = !!(hideNode && hideNode.checked);
+    var mode = sortNode && sortNode.value ? sortNode.value : "status";
     var shown = globalThis.filterContainers(rows, text, state, hideHealthy);
+    var sorted = shown;
+    if (typeof globalThis.sortContainers === "function") {
+      sorted = globalThis.sortContainers(shown, mode);
+    }
     var count = document.getElementById("container-filter-count");
     if (count) {
       count.textContent = globalThis.filterCount(data.available ? shown.length : 0, rows.length);
     }
     if (!data.available) {
+      clear(root);
       add(root, "p", "unavailable: " + (data.reason || ""));
       return;
     }
-    if (!shown.length) {
-      add(root, "p", rows.length ? "No containers match." : "No containers.");
+    if (typeof globalThis.renderContainersView === "function") {
+      globalThis.renderContainersView(root, sorted, pageView());
       return;
     }
-    var grid = add(root, "div", null, "container-grid");
-    shown.forEach(function (row) {
-      renderContainerCard(grid, row || {});
-    });
+    clear(root);
+    if (!sorted.length) {
+      add(root, "p", rows.length ? "No containers match." : "No containers.");
+    }
   }
 
   function renderHerdr(data) {
     var root = document.getElementById("herdr-block");
     if (!root) {
+      return;
+    }
+    if (typeof globalThis.renderHerdrBlock === "function") {
+      globalThis.renderHerdrBlock(root, data);
       return;
     }
     clear(root);
@@ -192,6 +155,10 @@
   function renderAgents(data) {
     var root = document.getElementById("agents-body");
     if (!root) {
+      return;
+    }
+    if (typeof globalThis.renderAgentsBody === "function") {
+      globalThis.renderAgentsBody(root, data, pageView());
       return;
     }
     clear(root);
@@ -330,6 +297,9 @@
         renderContainers(data.containers);
         renderHerdr(data.agents);
         renderAgents(data.agents);
+        if (typeof globalThis.renderGitView === "function") {
+          globalThis.renderGitView(document.getElementById("git-body"), data.git, pageView());
+        }
         renderHost(data.host);
         renderSessions(data.sessions);
       })
@@ -482,6 +452,10 @@
   if (filterHide) {
     filterHide.addEventListener("change", onFilterChange);
   }
+  var filterSort = document.getElementById("container-filter-sort");
+  if (filterSort) {
+    filterSort.addEventListener("change", onFilterChange);
+  }
 
   var form = document.getElementById("new-session-form");
   if (form) {
@@ -490,6 +464,10 @@
   var sessionsPanel = document.getElementById("panel-sessions");
   if (sessionsPanel) {
     sessionsPanel.addEventListener("click", onSessionClick);
+  }
+
+  if (typeof globalThis.initViewNav === "function") {
+    globalThis.initViewNav();
   }
 
   var raw = body.getAttribute("data-refresh");

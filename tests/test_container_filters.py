@@ -8,6 +8,7 @@ if str(ROOT) not in sys.path:
 from app.container_filters import (
     filter_containers,
     filter_count,
+    group_containers,
     sort_containers,
     sort_key,
 )
@@ -167,3 +168,104 @@ def test_filter_count_string():
 def test_filters_on_empty_input():
     assert sort_containers([]) == []
     assert filter_containers([]) == []
+
+
+def test_sort_containers_status_is_default_and_fallback():
+    rows = [_row("b"), _row("a", state="exited")]
+    assert sort_containers(rows) == sort_containers(rows, "status")
+    assert sort_containers(rows, "bogus") == sort_containers(rows, "status")
+
+
+def test_sort_containers_by_name_casefold_empty_last():
+    rows = [_row("Zeta"), _row("alpha"), {"state": "running"}, _row("beta")]
+    assert [row.get("name") for row in sort_containers(rows, "name")] == [
+        "alpha",
+        "beta",
+        "Zeta",
+        None,
+    ]
+
+
+def test_sort_containers_by_cpu_descending_missing_last():
+    rows = [
+        _row("low", cpu_percent=1.0),
+        _row("none"),
+        _row("high", cpu_percent=90.0),
+        _row("mid", cpu_percent=50.0),
+    ]
+    assert [row["name"] for row in sort_containers(rows, "cpu")] == [
+        "high",
+        "mid",
+        "low",
+        "none",
+    ]
+
+
+def test_sort_containers_cpu_ties_fall_back_to_name():
+    rows = [_row("b", cpu_percent=50.0), _row("a", cpu_percent=50.0)]
+    assert [row["name"] for row in sort_containers(rows, "cpu")] == ["a", "b"]
+
+
+def test_sort_containers_by_memory_percent_then_ratio():
+    rows = [
+        _row("ratio", memory_used_bytes=512, memory_limit_bytes=1024),
+        _row("percent", memory_percent=80.0),
+        _row("none"),
+        _row("low", memory_percent=5.0),
+    ]
+    assert [row["name"] for row in sort_containers(rows, "memory")] == [
+        "percent",
+        "ratio",
+        "low",
+        "none",
+    ]
+
+
+def test_sort_containers_memory_missing_without_usable_ratio():
+    rows = [
+        _row("has", memory_percent=10.0),
+        _row("no-limit", memory_used_bytes=512, memory_limit_bytes=0),
+        _row("no-ratio", memory_used_bytes=512),
+    ]
+    assert [row["name"] for row in sort_containers(rows, "memory")] == [
+        "has",
+        "no-limit",
+        "no-ratio",
+    ]
+
+
+def test_group_containers_other_last_sorted_and_stable():
+    rows = [
+        _row("z", compose_project="Zeta"),
+        _row("n"),
+        _row("a", compose_project="alpha"),
+        _row("n2", compose_project=None),
+        _row("m", compose_project=""),
+    ]
+    groups = group_containers(rows)
+    assert [name for name, _ in groups] == ["alpha", "Zeta", "Other"]
+    assert [row["name"] for row in groups[0][1]] == ["a"]
+    assert [row["name"] for row in groups[-1][1]] == ["n", "n2", "m"]
+
+
+def test_group_containers_preserves_input_order_within_a_group():
+    rows = [_row("b", compose_project="p"), _row("a", compose_project="p")]
+    assert [row["name"] for _, group in group_containers(rows) for row in group] == [
+        "b",
+        "a",
+    ]
+
+
+def test_group_containers_empty_input():
+    assert group_containers([]) == []
+
+
+def test_js_module_exports_and_bans_forbidden_text():
+    source = (ROOT / "app" / "static" / "container_filters.js").read_text()
+    assert "globalThis.filterContainers" in source
+    assert "globalThis.filterCount" in source
+    assert "globalThis.sortContainers" in source
+    assert "globalThis.groupContainers" in source
+    assert "innerHTML" not in source
+    assert "http://" not in source
+    assert "https://" not in source

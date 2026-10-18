@@ -1,0 +1,69 @@
+#panel-git {
+  background: #1a2332;
+  color: #e7ecf1;
+}
+
+#panel-git h2,
+#panel-git h3,
+#panel-git p {
+  color: #e7ecf1;
+}
+
+#panel-git .git-row,
+#panel-git .git-card {
+  background: #0f1419;
+  color: #e7ecf1;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+#panel-git .git-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  margin: 0 0 0.5rem;
+}
+
+#panel-git .git-card {
+  margin: 0 0 0.75rem;
+}
+
+#panel-git .git-name {
+  font-weight: 700;
+}
+
+#panel-git .git-branch {
+  color: #3dd68c;
+}
+
+#panel-git .git-detached,
+#panel-git .git-unavailable {
+  color: #f07178;
+}
+
+#panel-git .git-status,
+#panel-git .git-truncated,
+#panel-git .badge.git-badge {
+  color: #e6b35a;
+}
+
+#panel-git .badge.git-badge {
+  display: inline-block;
+  margin: 0 0.35rem 0.35rem 0;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #1a2332;
+  font-weight: 700;
+}
+
+#panel-git .git-card summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: #e7ecf1;
+}
+
+#panel-git.git-mobile .git-card {
+  width: 100%;
+}

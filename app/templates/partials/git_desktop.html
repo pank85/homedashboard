@@ -1,0 +1,45 @@
+{% macro human(value) -%}
+{%- if value is undefined or value is none or value == "" or value == "None" or value == "undefined" -%}unknown{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro %}
+<section id="panel-git" class="git-desktop">
+  <h2>Git</h2>
+  <div id="git-body">
+    {% if git is not mapping %}
+    <p class="git-status">No git roots configured.</p>
+    {% elif not git.available %}
+    <p class="git-status git-unavailable">unavailable: {{ git.reason if git.reason is string else "" }}</p>
+    {% elif not git.scanned or git.roots is not sequence or git.roots is string or not git.roots %}
+    <p class="git-status">No git roots configured.</p>
+    {% elif git.projects is not sequence or git.projects is string or not git.projects %}
+    <p class="git-status">No git projects found.</p>
+    {% else %}
+    <ul class="git-list">
+      {% for project in git.projects %}
+      {% if project is mapping %}
+      <li class="git-row">
+        <span class="git-name">{{ human(project.name) }}</span>
+        <span class="{{ "git-detached" if project.detached else "git-branch" }}">{% if project.detached %}detached{% else %}{{ human(project.branch) }}{% endif %}</span>
+        <span class="git-head">head {{ human(project.head_short) }}</span>
+        <span class="git-upstream">upstream {{ human(project.upstream) }}</span>
+        <span class="git-remote">remote {% if project.remote_url is string %}{{ human(project.remote_url) }}{% else %}unknown{% endif %}</span>
+        <span class="git-progress">
+          {% if project.in_progress is sequence and project.in_progress is not string %}
+          {% for flag in project.in_progress %}
+          {% if flag is string and flag %}
+          <span class="badge git-badge">{{ flag }}</span>
+          {% endif %}
+          {% endfor %}
+          {% endif %}
+        </span>
+        <span class="git-subject">{{ human(project.commit_subject) }}</span>
+        <span class="git-when">{{ human(project.commit_relative) }}</span>
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if git is mapping and git.truncated %}
+    <p class="git-truncated">The list stopped at the repo cap.</p>
+    {% endif %}
+  </div>
+</section>

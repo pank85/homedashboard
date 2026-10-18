@@ -254,6 +254,87 @@ def test_compose_service_missing_is_empty_and_inspect_keeps_list_value():
     assert by_name["two"]["id_short"] == "b"
 
 
+def test_compose_project_from_list_overridden_by_inspect():
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "abcdef0123456789",
+                    "Names": ["/web-1"],
+                    "Image": "img:1",
+                    "State": "running",
+                    "Labels": {
+                        "com.docker.compose.project": "shop",
+                        "com.docker.compose.service": "web",
+                    },
+                }
+            ]
+        if path.endswith("/json"):
+            inspected = _inspect("web-1", "running", health="healthy")
+            inspected["Config"] = {
+                "Labels": {
+                    "com.docker.compose.project": "shop-inspect",
+                    "com.docker.compose.service": "web-inspect",
+                }
+            }
+            return inspected
+        if path.endswith("/stats"):
+            return _stats()
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    row = result["containers"][0]
+    assert row["compose_project"] == "shop-inspect"
+    assert row["compose_service"] == "web-inspect"
+
+
+def test_compose_project_missing_is_empty_and_inspect_keeps_list_value():
+    def handler(path, params):
+        if path.endswith("/containers/json"):
+            return [
+                {
+                    "Id": "a",
+                    "Names": ["/one"],
+                    "Image": "img:1",
+                    "State": "running",
+                    "Labels": {"com.docker.compose.project": "proj-one"},
+                },
+                {
+                    "Id": "b",
+                    "Names": ["/two"],
+                    "Image": "img:2",
+                    "State": "running",
+                },
+            ]
+        if path.endswith("/containers/a/json"):
+            # Inspect has no Config.Labels; the list value must survive.
+            return _inspect("one", "running", health="healthy")
+        if path.endswith("/containers/a/stats"):
+            return _stats()
+        if path.endswith("/containers/b/json"):
+            return _inspect("two", "running", health="healthy")
+        if path.endswith("/containers/b/stats"):
+            return _stats()
+        raise AssertionError(path)
+
+    result = collect_containers(
+        socket_path="/injected.sock",
+        client=FakeClient(handler),
+        now=NOW,
+    )
+
+    by_name = {row["name"]: row for row in result["containers"]}
+    assert by_name["one"]["compose_project"] == "proj-one"
+    assert by_name["two"]["compose_project"] == ""
+    assert by_name["one"]["compose_service"] == ""
+    assert by_name["two"]["compose_service"] == ""
+
+
 def test_row_without_health_or_stats_has_new_keys():
     def handler(path, params):
         if path.endswith("/containers/json"):
@@ -282,6 +363,7 @@ def test_row_without_health_or_stats_has_new_keys():
     assert row["memory_used_bytes"] is None
     assert row["memory_limit_bytes"] is None
     assert row["compose_service"] == ""
+    assert row["compose_project"] == ""
     assert row["id_short"] == "deadbeefcafe"
 
 

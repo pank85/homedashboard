@@ -16,8 +16,20 @@ def build_dashboard(
     herdr_mode: str,
     refresh_seconds: int,
     generated_at: str,
+    git: dict | None = None,
 ) -> dict:
     """Return the dashboard payload shared by the page and the JSON API."""
+    if not isinstance(git, dict):
+        git = {
+            "available": True,
+            "reason": "",
+            "note": "git collector not configured",
+            "scanned": False,
+            "roots": [],
+            "truncated": False,
+            "refreshed_at": "",
+            "projects": [],
+        }
     return {
         "generated_at": generated_at,
         "refresh_seconds": refresh_seconds,
@@ -31,4 +43,5 @@ def build_dashboard(
         "containers": containers,
         "agents": agents,
         "host": host,
+        "git": git,
     }
