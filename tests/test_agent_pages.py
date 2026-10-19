@@ -258,6 +258,23 @@ def test_agent_page_template_has_blocked_sentence_and_back_link():
     assert "innerHTML" not in source
 
 
+def test_agent_page_loads_tabler_css_before_page_styles(monkeypatch, tmp_path):
+    source = (ROOT / "app" / "templates" / "agent.html").read_text(encoding="utf-8")
+    tabler = source.index('href="/static/tabler.css"')
+    assert tabler < source.index('href="/static/style.css"')
+    assert source.index('href="/static/style.css"') < source.index('href="/static/agents.css"')
+    assert source.index('href="/static/agents.css"') < source.index('href="/static/agent_page.css"')
+
+    application = _app(monkeypatch, tmp_path, _agents_payload())
+    with TestClient(application) as client:
+        found = client.get("/agents/pi")
+        missing = client.get("/agents/nope")
+    assert found.status_code == 200
+    assert missing.status_code == 404
+    for page in (found, missing):
+        assert 'href="/static/tabler.css"' in page.text
+
+
 def test_agent_page_js_and_css_are_clean():
     script = (ROOT / "app" / "static" / "agent_page.js").read_text(encoding="utf-8")
     style = (ROOT / "app" / "static" / "agent_page.css").read_text(encoding="utf-8")
