@@ -1,3 +1,6 @@
+/* Page shell only. Component chrome (surfaces, borders, radii, padding) is
+ * owned by tabler.css; this file keeps layout and the strings tests lock. */
+
 html {
   color-scheme: dark;
   background: var(--tblr-body-bg);
@@ -8,7 +11,9 @@ body {
   margin: 0;
   background: var(--tblr-body-bg);
   color: var(--tblr-body-color);
-  font: 16px/1.45 system-ui, sans-serif;
+  font-family: system-ui, sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.6;
   padding: 1rem;
 }
 
@@ -24,12 +29,6 @@ main {
   gap: 1rem;
 }
 
-section {
-  background: var(--tblr-card-bg);
-  border-radius: 8px;
-  padding: 1rem;
-}
-
 h1,
 h2,
 h3,
@@ -41,14 +40,7 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
   min-width: 44px;
-  padding: 0.6rem 1rem;
-  border: 0;
-  border-radius: 8px;
-  color: var(--tblr-body-color);
-  font: inherit;
-  font-weight: 700;
   text-decoration: none;
 }
 
@@ -64,23 +56,7 @@ p {
   background: var(--tblr-body-bg);
 }
 
-.level-ok {
-  color: var(--tblr-success);
-}
-
-.level-warn {
-  color: var(--tblr-warning);
-}
-
-.level-crit {
-  color: var(--tblr-danger);
-}
-
 @media (max-width: 640px) {
-  body {
-    font-size: 16px;
-  }
-
   main {
     display: flex;
     flex-direction: column;
@@ -93,10 +69,6 @@ p {
   #herdr-button {
     width: 100%;
   }
-
-  #herdr-button {
-    min-height: 44px;
-  }
 }
 
 .container-grid {
@@ -105,31 +77,23 @@ p {
   gap: 0.75rem;
 }
 
-.container-card,
+.container-card {
+  position: relative;
+}
+
 .session-card {
-  background: var(--tblr-body-bg);
-  border-radius: 8px;
-  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .badge {
-  display: inline-block;
   margin: 0 0.35rem 0.5rem 0;
-  padding: 0.15rem 0.45rem;
-  border-radius: 999px;
-  background: var(--tblr-body-bg);
-  font-weight: 700;
 }
 
 .badge.state-running,
 .badge.health-healthy {
   color: var(--tblr-success);
-}
-
-.badge.state-exited,
-.badge.state-restarting,
-.badge.health-unhealthy {
-  color: var(--tblr-danger);
 }
 
 .badge.state-paused,
@@ -139,24 +103,11 @@ p {
 }
 
 .meter {
-  height: 0.55rem;
   margin: 0 0 0.5rem;
-  background: var(--tblr-body-bg);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.meter-fill {
-  display: block;
-  height: 100%;
-  width: 0;
-  max-width: 100%;
-  background: var(--tblr-primary);
 }
 
 .filters,
-#new-session-form,
-.session-card {
+#new-session-form {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -175,15 +126,11 @@ p {
   font: inherit;
   color: var(--tblr-body-color);
   background: var(--tblr-body-bg);
-  border: 1px solid var(--tblr-primary);
-  border-radius: 8px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--border);
+  border-radius: var(--radius-control);
   padding: 0.4rem 0.6rem;
-}
-
-#new-session-form button,
-.session-card button {
-  background: var(--tblr-primary);
-  font-weight: 700;
 }
 
 button:disabled,
@@ -197,3 +144,9 @@ select:disabled {
     grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
   }
 }
+
+/* Host uses the same two-level surface model as the agents and git panels:
+   a muted panel with surface cards, so a stat card is separable from its
+   own panel by more than the 1px border. Do not move this onto .card-sm:
+   the .progress track is already --surface-muted and would vanish. */
+#panel-host { background: var(--surface-muted); }

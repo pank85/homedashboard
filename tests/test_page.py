@@ -445,8 +445,24 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
         assert 'href="/static/tabler.css"' in page.text
         tabler = client.get("/static/tabler.css")
         assert tabler.status_code == 200
-        for token in ("#206bc4", "#151f2c", "#1b293a", "#2fb344", "#f76707", "#d63939"):
+        for token in (
+            "#0F172A",
+            "#1B2336",
+            "#272F42",
+            "#F8FAFC",
+            "#94A3B8",
+            "#475569",
+            "#1E293B",
+            "#FFFFFF",
+            "#22C55E",
+            "#F59E0B",
+            "#EF4444",
+            "#F87171",
+            "#38BDF8",
+        ):
             assert token in tabler.text
+        for old in ("#206bc4", "#151f2c", "#1b293a", "#2fb344", "#f76707", "#d63939"):
+            assert old not in tabler.text
         assert "http://" not in tabler.text
         assert "https://" not in tabler.text
         assert "max-width: 640px" in style.text

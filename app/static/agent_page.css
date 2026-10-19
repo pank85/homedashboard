@@ -1,5 +1,4 @@
 .agent-page {
-  background: var(--tblr-body-bg);
   color: var(--tblr-body-color);
   margin: 0 auto;
   max-width: 60rem;
@@ -9,7 +8,7 @@
 .agent-back {
   display: inline-block;
   margin: 0 0 1rem;
-  color: var(--tblr-warning);
+  color: var(--accent);
 }
 
 .agent-heading {
@@ -26,9 +25,6 @@
 
 .agent-badges .badge {
   display: inline-block;
-  padding: 0.15rem 0.45rem;
-  border-radius: 999px;
-  background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
   font-weight: 700;
 }
@@ -48,7 +44,7 @@
 .agent-badges .badge.status-error,
 .agent-badges .badge.status-failed,
 .agent-badges .badge.status-exited {
-  color: var(--tblr-danger);
+  color: var(--danger-text);
 }
 
 .agent-detail {
@@ -64,10 +60,7 @@
 }
 
 .agent-chats .session-card {
-  background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
-  border-radius: 8px;
-  padding: 0.75rem;
   margin: 0 0 0.75rem;
 }
 
@@ -85,6 +78,6 @@
 }
 
 .agent-blocked {
-  color: var(--tblr-danger);
+  color: var(--danger-text);
   margin: 0;
 }

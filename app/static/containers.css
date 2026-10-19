@@ -1,12 +1,5 @@
 #panel-containers {
-  background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
-}
-
-#panel-containers .filters {
-  border: 1px solid var(--tblr-border-color);
-  border-radius: 8px;
-  padding: 0.75rem;
 }
 
 #panel-containers .filters input,
@@ -18,19 +11,13 @@
 }
 
 .project-group {
-  background: var(--tblr-body-bg);
   color: var(--tblr-body-color);
-  border-radius: 8px;
-  padding: 0.75rem;
   margin: 0 0 0.75rem;
 }
 
 .container-card {
   position: relative;
-  background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
-  border-radius: 8px;
-  padding: 0.75rem;
 }
 
 .container-card .card-body {
@@ -92,7 +79,7 @@
 .badge.state-exited,
 .badge.state-restarting,
 .badge.health-unhealthy {
-  color: var(--tblr-danger);
+  color: var(--danger-text);
 }
 
 .badge.state-paused,
@@ -103,9 +90,7 @@
 }
 
 .meter.progress {
-  height: 0.55rem;
   margin: 0 0 0.5rem;
-  background: var(--tblr-body-bg);
 }
 
 .meter-fill.progress-bar {

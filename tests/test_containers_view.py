@@ -296,7 +296,7 @@ def test_container_state_colors_live_in_containers_css() -> None:
     assert ".status-dot.state-exited" in css
     assert ".status-dot.state-paused" in css
     assert "var(--tblr-success)" in css
-    assert "var(--tblr-danger)" in css
+    assert "var(--danger-text)" in css
     assert "var(--tblr-warning)" in css
     assert ".container-card {\n  position: relative;" in css
     assert "level-" not in css

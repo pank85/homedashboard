@@ -1,6 +1,6 @@
 #panel-git {
-  background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
+  background: var(--surface-muted);
 }
 
 #panel-git h2,
@@ -11,10 +11,7 @@
 
 #panel-git .git-row,
 #panel-git .git-card {
-  background: var(--tblr-body-bg);
   color: var(--tblr-body-color);
-  border-radius: 8px;
-  padding: 0.75rem;
 }
 
 #panel-git .git-row {
@@ -39,7 +36,7 @@
 
 #panel-git .git-detached,
 #panel-git .git-unavailable {
-  color: var(--tblr-danger);
+  color: var(--danger-text);
 }
 
 #panel-git .git-status,
@@ -51,16 +48,19 @@
 #panel-git .badge.git-badge {
   display: inline-block;
   margin: 0 0.35rem 0.35rem 0;
-  padding: 0.15rem 0.45rem;
-  border-radius: 999px;
-  background: var(--tblr-card-bg);
   font-weight: 700;
+  background: var(--tblr-body-bg);
+}
+
+#panel-git .git-card details {
+  background: var(--tblr-body-bg);
 }
 
 #panel-git .git-card summary {
   min-height: 44px;
   display: flex;
   align-items: center;
+  background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
 }
 

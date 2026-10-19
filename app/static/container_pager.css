@@ -18,10 +18,10 @@
   color: var(--tblr-body-color);
   background: var(--tblr-body-bg);
   border: 1px solid var(--tblr-border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 
 #container-pager button:not(:disabled) {
-  color: var(--tblr-primary);
+  color: var(--accent);
   border-color: var(--tblr-primary);
 }
