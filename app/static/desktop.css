@@ -30,6 +30,33 @@
 }
 
 @media (min-width: 768px) {
+  /* Container cards become one-per-row wrapping rows: the inner wrapper is
+     the second child of the article, after the status strip. */
+  #panel-containers .container-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #panel-containers .container-card > div + div {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.75rem;
+  }
+
+  #panel-containers .container-card > div + div > p,
+  #panel-containers .container-card > div + div > h3,
+  #panel-containers .container-card > div + div > details {
+    margin: 0;
+  }
+
+  #panel-containers .container-card .meter {
+    flex: 1 1 6rem;
+    min-width: 4rem;
+    max-width: 8rem;
+    margin: 0;
+  }
+
   .view-nav [data-burger] {
     display: none;
   }

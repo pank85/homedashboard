@@ -67,6 +67,24 @@
     return running + " running · " + stopped + " stopped · " + unhealthy + " unhealthy";
   }
 
+  function syncContainerPager(page, pages) {
+    var status = document.getElementById("container-pager-status");
+    var prev = document.getElementById("container-pager-prev");
+    var next = document.getElementById("container-pager-next");
+    if (!status && !prev && !next) {
+      return;
+    }
+    if (status) {
+      status.textContent = "Page " + (page + 1) + " of " + pages;
+    }
+    if (prev) {
+      prev.disabled = page <= 0;
+    }
+    if (next) {
+      next.disabled = page >= pages - 1;
+    }
+  }
+
   function renderContainers(data) {
     var root = document.getElementById("containers-body");
     if (!root) {
@@ -99,10 +117,14 @@
     if (!data.available) {
       clear(root);
       add(root, "p", "unavailable: " + (data.reason || ""));
+      syncContainerPager(0, 1);
       return;
     }
+    var page = globalThis.pageContainers(sorted, globalThis.containerPage(), globalThis.CONTAINER_PAGE_SIZE);
+    globalThis.setContainerPage(page.page);
+    syncContainerPager(page.page, page.pages);
     if (typeof globalThis.renderContainersView === "function") {
-      globalThis.renderContainersView(root, sorted, pageView());
+      globalThis.renderContainersView(root, page.rows, pageView());
       return;
     }
     clear(root);
@@ -268,6 +290,7 @@
   var filterState = document.getElementById("container-filter-state");
   var filterHide = document.getElementById("container-filter-hide-healthy");
   function onFilterChange() {
+    globalThis.resetContainerPage();
     if (lastContainers) {
       renderContainers(lastContainers);
     }
@@ -284,6 +307,24 @@
   var filterSort = document.getElementById("container-filter-sort");
   if (filterSort) {
     filterSort.addEventListener("change", onFilterChange);
+  }
+  var pagerPrev = document.getElementById("container-pager-prev");
+  var pagerNext = document.getElementById("container-pager-next");
+  if (pagerPrev) {
+    pagerPrev.addEventListener("click", function () {
+      globalThis.setContainerPage(globalThis.containerPage() - 1);
+      if (lastContainers) {
+        renderContainers(lastContainers);
+      }
+    });
+  }
+  if (pagerNext) {
+    pagerNext.addEventListener("click", function () {
+      globalThis.setContainerPage(globalThis.containerPage() + 1);
+      if (lastContainers) {
+        renderContainers(lastContainers);
+      }
+    });
   }
 
   if (typeof globalThis.initViewNav === "function") {

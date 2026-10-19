@@ -10,6 +10,11 @@
 {%- else -%}0{%- endif -%}
 {%- endmacro %}
 {% set rows = containers.containers if containers.containers is iterable and containers.containers is not string else [] %}
+{% set page_rows = rows[:5] %}
+{% set pager = namespace(count=1) %}
+{% if containers.available and rows|length > 0 %}
+{% set pager.count = (rows|length + 4) // 5 %}
+{% endif %}
 {% set counts = namespace(running=0, stopped=0, unhealthy=0) %}
 {% for row in rows %}
 {% if row.state == "running" %}
@@ -22,7 +27,7 @@
 {% endif %}
 {% endfor %}
 {% set seen = namespace(names=[]) %}
-{% for row in rows %}
+{% for row in page_rows %}
 {% set project = row.compose_project if row.compose_project is string and row.compose_project != "" else "Other" %}
 {% if project not in seen.names %}
 {% set seen.names = seen.names + [project] %}
@@ -80,7 +85,7 @@
     <div class="project-group">
       <h3 class="project-heading">{{ project }}</h3>
       <div class="container-grid">
-        {% for row in rows %}
+        {% for row in page_rows %}
         {% set row_project = row.compose_project if row.compose_project is string and row.compose_project != "" else "Other" %}
         {% if row_project == project %}
         {% set subtitle = row.compose_service if row.compose_service else (row.image_short if row.image_short else (row.image if row.image else "")) %}
@@ -119,4 +124,9 @@
     {% endfor %}
     {% endif %}
   </div>
+  <nav id="container-pager" aria-label="Containers pages">
+    <button type="button" id="container-pager-prev" disabled>Previous</button>
+    <p id="container-pager-status">Page 1 of {{ pager.count }}</p>
+    <button type="button" id="container-pager-next"{% if pager.count <= 1 %} disabled{% endif %}>Next</button>
+  </nav>
 </section>

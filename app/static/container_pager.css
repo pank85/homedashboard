@@ -1,0 +1,27 @@
+#container-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  color: var(--tblr-body-color);
+  background: var(--tblr-body-bg);
+}
+
+#container-pager p {
+  margin: 0;
+}
+
+#container-pager button {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  color: var(--tblr-body-color);
+  background: var(--tblr-body-bg);
+  border: 1px solid var(--tblr-border-color);
+  border-radius: 4px;
+}
+
+#container-pager button:not(:disabled) {
+  color: var(--tblr-primary);
+  border-color: var(--tblr-primary);
+}
