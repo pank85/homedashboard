@@ -32,6 +32,43 @@
     return value === undefined || value === null ? "" : value;
   }
 
+  function finiteNumber(number) {
+    return typeof number === "number" && isFinite(number);
+  }
+
+  function clampPercent(number) {
+    if (number < 0) {
+      return 0;
+    }
+    if (number > 100) {
+      return 100;
+    }
+    return number;
+  }
+
+  function addMeter(parent, sentence, percent, level) {
+    var track = add(parent, "div", null, "progress");
+    track.setAttribute("role", "img");
+    track.setAttribute("aria-label", sentence);
+    var named = levelClass(level);
+    var fill = add(track, "span", null, named ? "progress-bar " + named : "progress-bar");
+    if (finiteNumber(percent)) {
+      fill.style.width = clampPercent(percent) + "%";
+    }
+    return track;
+  }
+
+  function addStat(parent, sentence, percent, level) {
+    var card = add(parent, "article", null, "card card-sm");
+    var named = levelClass(level);
+    if (named) {
+      add(card, "div", null, "card-status-top " + named);
+    }
+    add(card, "p", sentence, named);
+    addMeter(card, sentence, percent, level);
+    return card;
+  }
+
   function containerSentence(containers) {
     if (!containers || !containers.available) {
       return "containers unavailable";
@@ -72,43 +109,43 @@
     }
     clear(hostBody);
     host = host || {};
-    add(hostBody, "p", value(host.view));
+    add(hostBody, "p", value(host.view), "text-secondary");
     if (!host.available && host.reason) {
       add(hostBody, "p", "unavailable: " + host.reason);
     }
+    var cards = add(hostBody, "div", null, "row-cards");
     var cpu = host.cpu || {};
     if (cpu.available) {
-      add(
-        hostBody,
-        "p",
+      addStat(
+        cards,
         "CPU " + value(cpu.percent_human) + " · " + value(cpu.cores) + " cores · load " + value(cpu.loadavg_human),
-        levelClass(cpu.level)
+        cpu.percent,
+        cpu.level
       );
     } else {
-      add(hostBody, "p", "unavailable: " + value(cpu.reason));
+      add(cards, "p", "unavailable: " + value(cpu.reason));
     }
     var memory = host.memory || {};
     if (memory.available) {
-      add(
-        hostBody,
-        "p",
+      addStat(
+        cards,
         "RAM " + value(memory.used_human) + " / " + value(memory.total_human) + " · " + value(memory.percent_human),
-        levelClass(memory.level)
+        memory.percent,
+        memory.level
       );
     } else {
-      add(hostBody, "p", "unavailable: " + value(memory.reason));
+      add(cards, "p", "unavailable: " + value(memory.reason));
     }
+    var table = add(hostBody, "table", null, "table table-vcenter card-table");
     (host.disks || []).forEach(function (disk) {
       disk = disk || {};
+      var row = add(table, "tr");
       if (disk.available) {
-        add(
-          hostBody,
-          "p",
-          "disk " + value(disk.path) + " · " + value(disk.percent_human) + " · " + value(disk.used_human) + " / " + value(disk.total_human),
-          levelClass(disk.level)
-        );
+        var sentence = "disk " + value(disk.path) + " · " + value(disk.percent_human) + " · " + value(disk.used_human) + " / " + value(disk.total_human);
+        add(row, "td", sentence, levelClass(disk.level));
+        addMeter(add(row, "td"), sentence, disk.percent, disk.level);
       } else {
-        add(hostBody, "p", "unavailable: " + value(disk.reason));
+        add(row, "td", "unavailable: " + value(disk.reason));
       }
     });
     var summary = document.createElement("div");

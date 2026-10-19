@@ -74,7 +74,7 @@
     {% if not containers.available %}
     <p>unavailable: {{ containers.reason }}</p>
     {% elif not rows %}
-    <p>No containers.</p>
+    <div class="empty"><p class="empty-title">No containers.</p></div>
     {% else %}
     {% for project in projects.names %}
     <div class="project-group">
@@ -89,7 +89,8 @@
         <article class="container-card">
           <div class="container-scan">
             <h3>{{ human(row.name) }}</h3>
-            <span class="badge state-{{ state_word }}">{{ state_word }}</span>
+            <span class="badge badge-outline state-{{ state_word }}">{{ state_word }}</span>
+            <span class="status-dot state-{{ state_word }}"></span>
             <span>cpu {{ human(row.cpu_percent_human) }}</span>
             <span>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</span>
           </div>

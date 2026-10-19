@@ -1,27 +1,53 @@
-<section id="panel-host" data-mobile-panel data-section="host" role="tabpanel">
-  <h2>Host</h2>
-  <div id="host-body">
-    <p>{{ host.view }}</p>
+{% macro clamped_percent(value) -%}
+{%- if value < 0 -%}0{%- elif value > 100 -%}100{%- else -%}{{ value }}{%- endif -%}
+{%- endmacro -%}
+<section id="panel-host" class="card" data-mobile-panel data-section="host" role="tabpanel">
+  <div class="card-header">
+    <h2 class="card-title">Host</h2>
+  </div>
+  <div id="host-body" class="card-body">
+    <p class="text-secondary">{{ host.view }}</p>
     {% if not host.available and host.reason %}
     <p>unavailable: {{ host.reason }}</p>
     {% endif %}
-    {% if host.cpu.available %}
-    <p class="{% if host.cpu.level %}level-{{ host.cpu.level }}{% endif %}">CPU {{ host.cpu.percent_human }} · {{ host.cpu.cores }} cores · load {{ host.cpu.loadavg_human }}</p>
-    {% else %}
-    <p>unavailable: {{ host.cpu.reason }}</p>
-    {% endif %}
-    {% if host.memory.available %}
-    <p class="{% if host.memory.level %}level-{{ host.memory.level }}{% endif %}">RAM {{ host.memory.used_human }} / {{ host.memory.total_human }} · {{ host.memory.percent_human }}</p>
-    {% else %}
-    <p>unavailable: {{ host.memory.reason }}</p>
-    {% endif %}
-    {% for disk in host.disks %}
-    {% if disk.available %}
-    <p class="{% if disk.level %}level-{{ disk.level }}{% endif %}">disk {{ disk.path }} · {{ disk.percent_human }} · {{ disk.used_human }} / {{ disk.total_human }}</p>
-    {% else %}
-    <p>unavailable: {{ disk.reason }}</p>
-    {% endif %}
-    {% endfor %}
+    <div class="row-cards">
+      {% if host.cpu.available %}
+      <article class="card card-sm">
+        {%- set cpu_line = "CPU " ~ host.cpu.percent_human ~ " · " ~ host.cpu.cores ~ " cores · load " ~ host.cpu.loadavg_human -%}
+        {%- set cpu_level = host.cpu.level if host.cpu.level in ["ok", "warn", "crit"] else "" -%}
+        {% if cpu_level %}<div class="card-status-top level-{{ cpu_level }}"></div>{% endif %}
+        <p{% if cpu_level %} class="level-{{ cpu_level }}"{% endif %}>{{ cpu_line }}</p>
+        <div class="progress" role="img" aria-label="{{ cpu_line }}"><span class="progress-bar{% if cpu_level %} level-{{ cpu_level }}{% endif %}"{% if host.cpu.percent is number %} style="width: {{ clamped_percent(host.cpu.percent) }}%"{% endif %}></span></div>
+      </article>
+      {% else %}
+      <p>unavailable: {{ host.cpu.reason }}</p>
+      {% endif %}
+      {% if host.memory.available %}
+      <article class="card card-sm">
+        {%- set ram_line = "RAM " ~ host.memory.used_human ~ " / " ~ host.memory.total_human ~ " · " ~ host.memory.percent_human -%}
+        {%- set ram_level = host.memory.level if host.memory.level in ["ok", "warn", "crit"] else "" -%}
+        {% if ram_level %}<div class="card-status-top level-{{ ram_level }}"></div>{% endif %}
+        <p{% if ram_level %} class="level-{{ ram_level }}"{% endif %}>{{ ram_line }}</p>
+        <div class="progress" role="img" aria-label="{{ ram_line }}"><span class="progress-bar{% if ram_level %} level-{{ ram_level }}{% endif %}"{% if host.memory.percent is number %} style="width: {{ clamped_percent(host.memory.percent) }}%"{% endif %}></span></div>
+      </article>
+      {% else %}
+      <p>unavailable: {{ host.memory.reason }}</p>
+      {% endif %}
+    </div>
+    <table class="table table-vcenter card-table">
+      {% for disk in host.disks %}
+      <tr>
+        {% if disk.available %}
+        {%- set disk_line = "disk " ~ disk.path ~ " · " ~ disk.percent_human ~ " · " ~ disk.used_human ~ " / " ~ disk.total_human -%}
+        {%- set disk_level = disk.level if disk.level in ["ok", "warn", "crit"] else "" -%}
+        <td{% if disk_level %} class="level-{{ disk_level }}"{% endif %}>{{ disk_line }}</td>
+        <td><div class="progress" role="img" aria-label="{{ disk_line }}"><span class="progress-bar{% if disk_level %} level-{{ disk_level }}{% endif %}"{% if disk.percent is number %} style="width: {{ clamped_percent(disk.percent) }}%"{% endif %}></span></div></td>
+        {% else %}
+        <td>unavailable: {{ disk.reason }}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </table>
     {% set seen_agents = [] %}
     {% set running_agents = [] %}
     {% if agents and agents.agents is sequence and agents.agents is not string and agents.agents is not mapping %}

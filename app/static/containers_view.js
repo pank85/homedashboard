@@ -163,10 +163,10 @@
   }
 
   function addMeter(parent, label, width) {
-    var meter = add(parent, "div", null, "meter");
+    var meter = add(parent, "div", null, "meter progress");
     meter.setAttribute("role", "img");
     meter.setAttribute("aria-label", label);
-    var fill = add(meter, "span", null, "meter-fill");
+    var fill = add(meter, "span", null, "meter-fill progress-bar");
     fill.style.width = clampPercent(width) + "%";
   }
 
@@ -177,22 +177,26 @@
     var used = human(row.memory_used_human);
     var limit = human(row.memory_limit_human);
     var card = add(parent, "article", null, "container-card");
-    add(card, "h3", cardTitle(row));
+    add(card, "div", null, "card-status-top state-" + state);
+    var body = add(card, "div", null, "card-body");
+    add(body, "h3", cardTitle(row));
     var sub = subtitle(row);
     if (sub) {
-      add(card, "p", sub, "container-subtitle");
+      add(body, "p", sub, "container-subtitle");
     }
-    var badges = add(card, "p");
-    add(badges, "span", state, "badge state-" + state);
+    var badges = add(body, "p");
+    add(badges, "span", state, "badge badge-outline state-" + state);
     badges.appendChild(document.createTextNode(" "));
-    add(badges, "span", health, "badge health-" + health);
-    add(card, "p", "uptime " + human(row.uptime_human));
-    add(card, "p", "restarts " + human(row.restart_count));
-    add(card, "p", "cpu " + cpuLabel);
-    addMeter(card, "cpu " + cpuLabel, row.cpu_percent);
-    add(card, "p", "memory " + used + " / " + limit);
-    addMeter(card, "memory " + used + " / " + limit, memoryWidth(row));
-    var details = add(card, "details");
+    add(badges, "span", health, "badge badge-outline health-" + health);
+    badges.appendChild(document.createTextNode(" "));
+    add(badges, "span", null, "status-dot state-" + state);
+    add(body, "p", "uptime " + human(row.uptime_human));
+    add(body, "p", "restarts " + human(row.restart_count));
+    add(body, "p", "cpu " + cpuLabel);
+    addMeter(body, "cpu " + cpuLabel, row.cpu_percent);
+    add(body, "p", "memory " + used + " / " + limit);
+    addMeter(body, "memory " + used + " / " + limit, memoryWidth(row));
+    var details = add(body, "details");
     add(details, "summary", "Details");
     add(details, "p", imageText(row));
     add(details, "p", "id " + human(row.id_short));
@@ -203,7 +207,8 @@
     var card = add(parent, "article", null, "container-card");
     var line = add(card, "div", null, "container-scan");
     add(line, "h3", cardTitle(row));
-    add(line, "span", state, "badge state-" + state);
+    add(line, "span", state, "badge badge-outline state-" + state);
+    add(line, "span", null, "status-dot state-" + state);
     add(line, "span", "cpu " + human(row.cpu_percent_human));
     add(line, "span", "memory " + human(row.memory_used_human) + " / " + human(row.memory_limit_human));
     var sub = subtitle(row);
@@ -260,7 +265,8 @@
     clear(body);
     var list = Array.isArray(rows) ? rows : [];
     if (!list.length) {
-      add(body, "p", "No containers.");
+      var empty = add(body, "div", null, "empty");
+      add(empty, "p", "No containers.", "empty-title");
       return;
     }
     var groups = groupedRows(list);

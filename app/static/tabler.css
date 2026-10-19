@@ -75,3 +75,147 @@ section,
   color: var(--tblr-primary);
   border-bottom: 2px solid var(--tblr-primary);
 }
+
+.card {
+  position: relative;
+}
+
+.card-sm {
+  padding: 0.5rem 0.75rem;
+}
+
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--tblr-border-color);
+}
+
+.card-title {
+  margin: 0;
+  color: var(--tblr-heading-color);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.card-body {
+  padding: 0.75rem 1rem;
+}
+
+.card-status-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--tblr-border-color);
+}
+
+.card-status-top.level-ok {
+  background: var(--tblr-success);
+}
+
+.card-status-top.level-warn {
+  background: var(--tblr-warning);
+}
+
+.card-status-top.level-crit {
+  background: var(--tblr-danger);
+}
+
+.row-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.75rem;
+}
+
+.progress {
+  height: 0.5rem;
+  overflow: hidden;
+  background: var(--tblr-border-color);
+  border-radius: 4px;
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  max-width: 100%;
+  background: var(--tblr-primary);
+}
+
+.progress-bar.level-ok {
+  background: var(--tblr-success);
+}
+
+.progress-bar.level-warn {
+  background: var(--tblr-warning);
+}
+
+.progress-bar.level-crit {
+  background: var(--tblr-danger);
+}
+
+.badge.badge-outline {
+  background: transparent;
+  border: 1px solid var(--tblr-border-color);
+  border-radius: 4px;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--tblr-secondary);
+  vertical-align: middle;
+}
+
+.status-dot.level-ok {
+  background: var(--tblr-success);
+}
+
+.status-dot.level-warn {
+  background: var(--tblr-warning);
+}
+
+.status-dot.level-crit {
+  background: var(--tblr-danger);
+}
+
+.empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--tblr-muted);
+}
+
+.empty-title {
+  color: var(--tblr-heading-color);
+  font-weight: 600;
+}
+
+.empty-subtitle {
+  color: var(--tblr-muted);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table.table-vcenter td {
+  vertical-align: middle;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--tblr-border-color);
+}
+
+.table.card-table {
+  margin: 0;
+}
+
+.text-secondary {
+  color: var(--tblr-muted);
+}

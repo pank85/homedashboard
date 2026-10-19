@@ -3,6 +3,12 @@
   color: var(--tblr-body-color);
 }
 
+#panel-containers .filters {
+  border: 1px solid var(--tblr-border-color);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
 #panel-containers .filters input,
 #panel-containers .filters select,
 #panel-containers .container-card summary {
@@ -20,10 +26,15 @@
 }
 
 .container-card {
+  position: relative;
   background: var(--tblr-card-bg);
   color: var(--tblr-body-color);
   border-radius: 8px;
   padding: 0.75rem;
+}
+
+.container-card .card-body {
+  padding: 0;
 }
 
 .container-subtitle,
@@ -40,6 +51,37 @@
 
 .container-scan h3 {
   margin: 0;
+}
+
+/* Container state, distinct from the host ok|warn|crit level names. */
+.card-status-top.state-running {
+  background: var(--tblr-success);
+}
+
+.card-status-top.state-exited,
+.card-status-top.state-restarting {
+  background: var(--tblr-danger);
+}
+
+.card-status-top.state-paused,
+.card-status-top.state-created,
+.card-status-top.state-unknown {
+  background: var(--tblr-warning);
+}
+
+.status-dot.state-running {
+  background: var(--tblr-success);
+}
+
+.status-dot.state-exited,
+.status-dot.state-restarting {
+  background: var(--tblr-danger);
+}
+
+.status-dot.state-paused,
+.status-dot.state-created,
+.status-dot.state-unknown {
+  background: var(--tblr-warning);
 }
 
 .badge.state-running,
@@ -60,11 +102,13 @@
   color: var(--tblr-warning);
 }
 
-.meter {
+.meter.progress {
+  height: 0.55rem;
+  margin: 0 0 0.5rem;
   background: var(--tblr-body-bg);
 }
 
-.meter-fill {
+.meter-fill.progress-bar {
   background: var(--tblr-success);
 }
 

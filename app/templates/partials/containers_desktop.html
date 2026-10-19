@@ -74,7 +74,7 @@
     {% if not containers.available %}
     <p>unavailable: {{ containers.reason }}</p>
     {% elif not rows %}
-    <p>No containers.</p>
+    <div class="empty"><p class="empty-title">No containers.</p></div>
     {% else %}
     {% for project in projects.names %}
     <div class="project-group">
@@ -94,20 +94,23 @@
         {% set meter.memory = row.memory_used_bytes / row.memory_limit_bytes * 100 %}
         {% endif %}
         <article class="container-card">
-          <h3>{{ human(row.name) }}</h3>
-          {% if subtitle %}<p class="container-subtitle">{{ subtitle }}</p>{% endif %}
-          <p><span class="badge state-{{ state_word }}">{{ state_word }}</span> <span class="badge health-{{ health }}">{{ health }}</span></p>
-          <p>uptime {{ human(row.uptime_human) }}</p>
-          <p>restarts {{ human(row.restart_count) }}</p>
-          <p>cpu {{ human(row.cpu_percent_human) }}</p>
-          <div class="meter" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
-          <p>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</p>
-          <div class="meter" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill" style="width: {{ bar_width(meter.memory) }}%"></span></div>
-          <details>
-            <summary>Details</summary>
-            <p>{{ image }}</p>
-            <p>id {{ human(row.id_short) }}</p>
-          </details>
+          <div class="card-status-top state-{{ state_word }}"></div>
+          <div class="card-body">
+            <h3>{{ human(row.name) }}</h3>
+            {% if subtitle %}<p class="container-subtitle">{{ subtitle }}</p>{% endif %}
+            <p><span class="badge badge-outline state-{{ state_word }}">{{ state_word }}</span> <span class="badge badge-outline health-{{ health }}">{{ health }}</span> <span class="status-dot state-{{ state_word }}"></span></p>
+            <p>uptime {{ human(row.uptime_human) }}</p>
+            <p>restarts {{ human(row.restart_count) }}</p>
+            <p>cpu {{ human(row.cpu_percent_human) }}</p>
+            <div class="meter progress" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill progress-bar" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
+            <p>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</p>
+            <div class="meter progress" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill progress-bar" style="width: {{ bar_width(meter.memory) }}%"></span></div>
+            <details>
+              <summary>Details</summary>
+              <p>{{ image }}</p>
+              <p>id {{ human(row.id_short) }}</p>
+            </details>
+          </div>
         </article>
         {% endif %}
         {% endfor %}

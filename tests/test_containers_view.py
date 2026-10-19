@@ -255,6 +255,53 @@ def test_css_uses_dark_palette_and_tap_targets() -> None:
     assert "white" not in css.lower()
 
 
+def test_desktop_card_uses_strip_body_outline_badges_and_progress() -> None:
+    html = _render("containers_desktop.html", _payload(_web_row()))
+    assert '<article class="container-card">' in html
+    assert '<div class="card-status-top state-running"></div>' in html
+    assert '<div class="card-body">' in html
+    assert '<span class="badge badge-outline state-running">running</span>' in html
+    assert '<span class="badge badge-outline health-healthy">healthy</span>' in html
+    assert '<span class="status-dot state-running"></span>' in html
+    assert '<div class="meter progress" role="img"' in html
+    assert '<span class="meter-fill progress-bar" style="width: 12.5%">' in html
+    assert "level-" not in html
+
+
+def test_desktop_empty_state_and_unavailable_stay_text() -> None:
+    empty = _render("containers_desktop.html", _payload())
+    assert '<div class="empty"><p class="empty-title">No containers.</p></div>' in empty
+    unavailable = _render(
+        "containers_desktop.html",
+        {"available": False, "reason": "docker socket not reachable", "containers": []},
+    )
+    assert "<p>unavailable: docker socket not reachable</p>" in unavailable
+
+
+def test_mobile_scan_line_is_one_div_with_a_span_dot() -> None:
+    html = _render("containers_mobile.html", _payload(_web_row()))
+    line = re.search(r'<div class="container-scan">.*?</div>', html, re.S).group(0)
+    assert line.count("<div") == 1
+    assert '<span class="status-dot state-running"></span>' in line
+    assert '<span class="badge badge-outline state-running">running</span>' in line
+    assert "level-" not in html
+    empty = _render("containers_mobile.html", _payload())
+    assert '<div class="empty"><p class="empty-title">No containers.</p></div>' in empty
+
+
+def test_container_state_colors_live_in_containers_css() -> None:
+    css = VIEW_CSS.read_text(encoding="utf-8")
+    assert ".card-status-top.state-running" in css
+    assert ".status-dot.state-running" in css
+    assert ".status-dot.state-exited" in css
+    assert ".status-dot.state-paused" in css
+    assert "var(--tblr-success)" in css
+    assert "var(--tblr-danger)" in css
+    assert "var(--tblr-warning)" in css
+    assert ".container-card {\n  position: relative;" in css
+    assert "level-" not in css
+
+
 def test_view_script_source_contract() -> None:
     source = VIEW_JS.read_text(encoding="utf-8")
     assert "globalThis.renderContainersView" in source
@@ -269,6 +316,13 @@ def test_view_script_source_contract() -> None:
     assert "https://" not in source
     assert "createElement" in source
     assert "textContent" in source
+    assert "level-" not in source
+    assert '"meter progress"' in source
+    assert '"meter-fill progress-bar"' in source
+    assert '"card-body"' in source
+    assert '"empty-title"' in source
+    assert '"status-dot state-"' in source
+    assert '"badge badge-outline state-"' in source
 
 
 def test_render_containers_view_groups_without_touching_filters() -> None:
@@ -382,12 +436,19 @@ if (html.indexOf(">Alpha</h3>") > html.indexOf(">zeta</h3>")) throw new Error("g
 if (!html.includes(">Other</h3>")) throw new Error("missing Other");
 if (html.indexOf(">a-card</h3>") > html.indexOf(">z-first</h3>")) throw new Error("card order");
 if (!html.includes("abc") && !html.includes("id z1")) throw new Error("missing id");
-if (!html.includes('class="meter"')) throw new Error("desktop meter missing");
+if (!html.includes('class="meter progress"')) throw new Error("desktop meter missing");
+if (!html.includes('class="meter-fill progress-bar"')) throw new Error("desktop meter fill missing");
+if (!html.includes('class="card-status-top state-running"')) throw new Error("desktop status strip missing");
+if (!html.includes('class="badge badge-outline state-running"')) throw new Error("desktop state badge not outline");
+if (!html.includes('class="status-dot state-running"')) throw new Error("desktop status dot missing");
 const mobile = document.createElement("div");
 mobile.id = "containers-body";
 renderContainersView(mobile, [{ name: "web-1", compose_service: "web", state: "running", cpu_percent_human: "12.5%", memory_used_human: "512 B", memory_limit_human: "1.0 KiB", id_short: "abc123", image_short: "web:latest" }], "mobile");
 const mobileHtml = serialize(mobile);
 if (mobileHtml.includes("meter")) throw new Error("mobile meter");
+if (mobileHtml.includes("width:")) throw new Error("mobile width style");
+if (mobileHtml.includes("card-body")) throw new Error("mobile card body");
+if (!mobileHtml.includes('class="status-dot state-running"')) throw new Error("mobile status dot missing");
 if (!mobileHtml.includes(">web-1</h3>")) throw new Error("mobile title");
 if (mobileHtml.includes(">web</h3>")) throw new Error("service used as title");
 if (!mobileHtml.includes("abc123")) throw new Error("mobile id");
