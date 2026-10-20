@@ -372,7 +372,13 @@ def create_app(
         if not isinstance(body, dict):
             return body
         try:
-            presented = present_dashboard({key: body})
+            presented = present_dashboard(
+                {key: body},
+                cpu_warn=settings.cpu_warn,
+                cpu_crit=settings.cpu_crit,
+                mem_warn=settings.mem_warn,
+                mem_crit=settings.mem_crit,
+            )
         except Exception:
             _LOGGER.exception("present failed")
             return body
@@ -423,7 +429,13 @@ def create_app(
         except Exception:
             _LOGGER.exception("herdr persistence failed")
         try:
-            presented = present_dashboard(payload)
+            presented = present_dashboard(
+                payload,
+                cpu_warn=settings.cpu_warn,
+                cpu_crit=settings.cpu_crit,
+                mem_warn=settings.mem_warn,
+                mem_crit=settings.mem_crit,
+            )
         except Exception:
             _LOGGER.exception("present failed")
             return payload

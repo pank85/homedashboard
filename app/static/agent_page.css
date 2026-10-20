@@ -51,28 +51,6 @@
   margin: 0 0 1rem;
 }
 
-.agent-chats {
-  margin: 0 0 1rem;
-}
-
-.agent-chats h2 {
-  margin: 0 0 0.5rem;
-}
-
-.agent-chats .session-card {
-  color: var(--tblr-body-color);
-  margin: 0 0 0.75rem;
-}
-
-.agent-chats .session-card h3 {
-  margin: 0 0 0.25rem;
-}
-
-.agent-chats .session-meta,
-.agent-chats .session-updated {
-  margin: 0;
-}
-
 .agent-empty {
   color: var(--tblr-warning);
 }

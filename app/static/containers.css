@@ -93,10 +93,6 @@
   margin: 0 0 0.5rem;
 }
 
-.meter-fill.progress-bar {
-  background: var(--tblr-success);
-}
-
 #container-summary {
   color: var(--tblr-body-color);
 }

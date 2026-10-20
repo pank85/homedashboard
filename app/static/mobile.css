@@ -12,8 +12,7 @@
 }
 
 .container-card,
-.agent-card,
-.session-card {
+.agent-card {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -21,12 +20,7 @@
 
 .view-nav button,
 .filters input,
-.filters select,
-#new-session-form input,
-#new-session-form select,
-#new-session-form button,
-.session-card input,
-.session-card button {
+.filters select {
   min-height: 44px;
 }
 
@@ -47,7 +41,7 @@
     z-index: 20;
     margin: 0.25rem 0 0;
     padding: 0.5rem;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-card);
     background: var(--tblr-body-bg);
   }

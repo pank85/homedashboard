@@ -107,9 +107,9 @@
             <p>uptime {{ human(row.uptime_human) }}</p>
             <p>restarts {{ human(row.restart_count) }}</p>
             <p>cpu {{ human(row.cpu_percent_human) }}</p>
-            <div class="meter progress" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill progress-bar" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
+            <div class="meter progress" role="img" aria-label="cpu {{ human(row.cpu_percent_human) }}"><span class="meter-fill progress-bar{% if row.cpu_level %} level-{{ row.cpu_level }}{% endif %}" style="width: {{ bar_width(row.cpu_percent) }}%"></span></div>
             <p>memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}</p>
-            <div class="meter progress" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill progress-bar" style="width: {{ bar_width(meter.memory) }}%"></span></div>
+            <div class="meter progress" role="img" aria-label="memory {{ human(row.memory_used_human) }} / {{ human(row.memory_limit_human) }}"><span class="meter-fill progress-bar{% if row.memory_level %} level-{{ row.memory_level }}{% endif %}" style="width: {{ bar_width(meter.memory) }}%"></span></div>
             <details>
               <summary>Details</summary>
               <p>{{ image }}</p>

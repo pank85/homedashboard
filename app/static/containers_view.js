@@ -159,15 +159,19 @@
     if (finiteNumber(row.memory_used_bytes) && finiteNumber(row.memory_limit_bytes) && row.memory_limit_bytes > 0) {
       return clampPercent(row.memory_used_bytes / row.memory_limit_bytes * 100);
     }
-    return 0;
+    return null;
   }
 
-  function addMeter(parent, label, width) {
+  function addMeter(parent, label, percent, level) {
     var meter = add(parent, "div", null, "meter progress");
     meter.setAttribute("role", "img");
     meter.setAttribute("aria-label", label);
-    var fill = add(meter, "span", null, "meter-fill progress-bar");
-    fill.style.width = clampPercent(width) + "%";
+    var className = "meter-fill progress-bar";
+    if (level) {
+      className += " level-" + level;
+    }
+    var fill = add(meter, "span", null, className);
+    fill.style.width = clampPercent(percent) + "%";
   }
 
   function renderDesktopCard(parent, row) {
@@ -193,9 +197,9 @@
     add(body, "p", "uptime " + human(row.uptime_human));
     add(body, "p", "restarts " + human(row.restart_count));
     add(body, "p", "cpu " + cpuLabel);
-    addMeter(body, "cpu " + cpuLabel, row.cpu_percent);
+    addMeter(body, "cpu " + cpuLabel, row.cpu_percent, row.cpu_level);
     add(body, "p", "memory " + used + " / " + limit);
-    addMeter(body, "memory " + used + " / " + limit, memoryWidth(row));
+    addMeter(body, "memory " + used + " / " + limit, memoryWidth(row), row.memory_level);
     var details = add(body, "details");
     add(details, "summary", "Details");
     add(details, "p", imageText(row));

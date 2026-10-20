@@ -230,3 +230,83 @@ def test_present_dashboard_retains_generated_keys():
     payload["generated_at"] = "2024-06-01T00:00:00Z"
     out = present_dashboard(payload)
     assert out["generated_at"] == "2024-06-01T00:00:00Z"
+
+
+def test_present_container_levels_use_default_thresholds():
+    rows = present_dashboard(_payload())["containers"]["containers"]
+    assert rows[0]["cpu_level"] == "ok"
+    assert rows[0]["memory_level"] == "ok"
+    assert "cpu_level" not in rows[1]
+    assert "memory_level" not in rows[1]
+
+
+def test_present_container_level_boundaries():
+    for cpu, word in ((90.0, "crit"), (89.9, "warn"), (75.0, "warn"), (74.9, "ok")):
+        payload = {"containers": {"available": True, "containers": [{"cpu_percent": cpu}]}}
+        row = present_dashboard(payload)["containers"]["containers"][0]
+        assert row["cpu_level"] == word, cpu
+    for memory, word in ((90.0, "crit"), (89.9, "warn"), (75.0, "warn"), (74.9, "ok")):
+        payload = {
+            "containers": {
+                "available": True,
+                "containers": [
+                    {
+                        "memory_used_bytes": int(round(memory * 10)),
+                        "memory_limit_bytes": 1000,
+                    }
+                ],
+            }
+        }
+        row = present_dashboard(payload)["containers"]["containers"][0]
+        assert row["memory_level"] == word, memory
+        assert abs(row["memory_percent"] - memory) < 1e-9
+
+
+def test_present_container_levels_custom_thresholds():
+    payload = _payload()
+    rows = payload["containers"]["containers"]
+    rows[0]["cpu_percent"] = 65.0
+    rows[1]["cpu_percent"] = 85.0
+    default = present_dashboard(payload)["containers"]["containers"]
+    assert default[0]["cpu_level"] == "ok"
+    assert default[1]["cpu_level"] == "warn"
+    custom = present_dashboard(payload, cpu_warn=60.0, cpu_crit=80.0)
+    custom_rows = custom["containers"]["containers"]
+    assert custom_rows[0]["cpu_level"] == "warn"
+    assert custom_rows[1]["cpu_level"] == "crit"
+    memory_payload = {
+        "containers": {
+            "available": True,
+            "containers": [
+                {"memory_used_bytes": 650, "memory_limit_bytes": 1000},
+                {"memory_used_bytes": 850, "memory_limit_bytes": 1000},
+            ],
+        }
+    }
+    memory_rows = present_dashboard(
+        memory_payload, mem_warn=60.0, mem_crit=80.0
+    )["containers"]["containers"]
+    assert memory_rows[0]["memory_level"] == "warn"
+    assert memory_rows[1]["memory_level"] == "crit"
+
+
+def test_present_container_levels_omit_keys_for_unknown_stats():
+    rows = present_dashboard(_payload())["containers"]["containers"]
+    assert "cpu_level" not in rows[1]
+    assert "memory_level" not in rows[1]
+    payload = {
+        "containers": {
+            "available": True,
+            "containers": [{"cpu_percent": "unknown"}],
+        }
+    }
+    row = present_dashboard(payload)["containers"]["containers"][0]
+    assert "cpu_level" not in row
+    assert row["cpu_percent_human"] == "unknown"
+
+
+def test_present_module_stays_pure():
+    source = (ROOT / "app" / "present.py").read_text(encoding="utf-8")
+    assert "import settings" not in source
+    assert "app.settings" not in source
+    assert "from app.collectors" not in source

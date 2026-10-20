@@ -81,12 +81,6 @@ p {
   position: relative;
 }
 
-.session-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 .badge {
   margin: 0 0.35rem 0.5rem 0;
 }
@@ -106,20 +100,14 @@ p {
   margin: 0 0 0.5rem;
 }
 
-.filters,
-#new-session-form {
+.filters {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
 .filters input,
-.filters select,
-#new-session-form input,
-#new-session-form select,
-#new-session-form button,
-.session-card input,
-.session-card button {
+.filters select {
   width: 100%;
   box-sizing: border-box;
   min-height: 44px;
@@ -128,7 +116,7 @@ p {
   background: var(--tblr-body-bg);
   border-width: 1px;
   border-style: solid;
-  border-color: var(--border);
+  border-color: var(--border-strong);
   border-radius: var(--radius-control);
   padding: 0.4rem 0.6rem;
 }

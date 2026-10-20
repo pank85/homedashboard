@@ -7,6 +7,8 @@ TEMPLATES = ROOT / "app" / "templates"
 
 DESKTOP_CSS = STATIC / "desktop.css"
 MOBILE_CSS = STATIC / "mobile.css"
+STYLE_CSS = STATIC / "style.css"
+AGENT_PAGE_CSS = STATIC / "agent_page.css"
 VIEW_NAV_JS = STATIC / "view_nav.js"
 APP_JS = STATIC / "app.js"
 HOST_VIEW_JS = STATIC / "host_view.js"
@@ -80,8 +82,9 @@ def test_mobile_css_hides_hidden_panels() -> None:
 
 def test_mobile_css_stacks_cards() -> None:
     source = _read(MOBILE_CSS)
-    for selector in (".container-card", ".agent-card", ".session-card"):
+    for selector in (".container-card", ".agent-card"):
         assert selector in source
+    assert ".session-card" not in source
     assert "flex-direction: column" in source
 
 
@@ -90,9 +93,16 @@ def test_mobile_css_sets_44px_tap_targets() -> None:
     assert ".view-nav button" in source
     assert ".filters input" in source
     assert ".filters select" in source
-    assert "#new-session-form button" in source
-    assert ".session-card button" in source
+    assert "#new-session-form" not in source
+    assert ".session-card" not in source
     assert "min-height: 44px" in source
+
+
+def test_dead_session_selectors_are_absent_from_served_stylesheets() -> None:
+    for css in (STYLE_CSS, MOBILE_CSS, AGENT_PAGE_CSS):
+        source = _read(css)
+        for dead in (".session-card", "#new-session-form", ".agent-chats"):
+            assert dead not in source
 
 
 def test_mobile_css_has_no_urls() -> None:

@@ -452,6 +452,7 @@ def test_page_renders_with_every_source_unavailable(monkeypatch):
             "#F8FAFC",
             "#94A3B8",
             "#475569",
+            "#73849A",
             "#1E293B",
             "#FFFFFF",
             "#22C55E",

@@ -11,6 +11,8 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from app.present import present_dashboard
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "app" / "templates"
 STATIC = ROOT / "app" / "static"
@@ -49,10 +51,12 @@ def _web_row() -> dict:
         "restart_count": 2,
         "cpu_percent": 12.5,
         "cpu_percent_human": "12.5%",
+        "cpu_level": "ok",
         "memory_used_bytes": 512,
         "memory_limit_bytes": 1024,
         "memory_used_human": "512 B",
         "memory_limit_human": "1.0 KiB",
+        "memory_level": "warn",
     }
 
 
@@ -238,6 +242,7 @@ def test_partials_copy_macros_and_do_not_call_filter_globals() -> None:
         assert "{% macro human(value) -%}" in source
         assert "{% macro health_word(value) -%}" in source
         assert "{% macro bar_width(value) -%}" in source
+        assert "meter_level" not in source
         assert "group_containers" not in source
         assert "sort_containers" not in source
         assert "innerHTML" not in source
@@ -264,8 +269,7 @@ def test_desktop_card_uses_strip_body_outline_badges_and_progress() -> None:
     assert '<span class="badge badge-outline health-healthy">healthy</span>' in html
     assert '<span class="status-dot state-running"></span>' in html
     assert '<div class="meter progress" role="img"' in html
-    assert '<span class="meter-fill progress-bar" style="width: 12.5%">' in html
-    assert "level-" not in html
+    assert '<span class="meter-fill progress-bar level-ok" style="width: 12.5%">' in html
 
 
 def test_desktop_empty_state_and_unavailable_stay_text() -> None:
@@ -276,6 +280,64 @@ def test_desktop_empty_state_and_unavailable_stay_text() -> None:
         {"available": False, "reason": "docker socket not reachable", "containers": []},
     )
     assert "<p>unavailable: docker socket not reachable</p>" in unavailable
+
+
+def _cpu_span(html: str) -> str:
+    match = re.search(
+        r'<div class="meter progress" role="img" aria-label="cpu [^"]*">'
+        r'<span class="meter-fill progress-bar[^"]*" style="width: [^"]*"></span>',
+        html,
+    )
+    assert match, html
+    return match.group(0)
+
+
+def test_container_meter_levels_follow_the_host_thresholds() -> None:
+    cases = [
+        (92.0, "level-crit", "92.0%"),
+        (90.0, "level-crit", "90.0%"),
+        (89.9, "level-warn", "89.9%"),
+        (80.0, "level-warn", "80.0%"),
+        (75.0, "level-warn", "75.0%"),
+        (74.9, "level-ok", "74.9%"),
+        (10.0, "level-ok", "10.0%"),
+        (150.0, "level-crit", "100%"),
+        (None, None, "0%"),
+    ]
+    for cpu, level, width in cases:
+        row = _web_row()
+        row["cpu_percent"] = cpu
+        presented = present_dashboard(
+            {"containers": {"available": True, "containers": [row]}}
+        )["containers"]["containers"][0]
+        html = _render("containers_desktop.html", _payload(presented))
+        span = _cpu_span(html)
+        assert f'style="width: {width}"' in span, (cpu, span)
+        if level is None:
+            assert "level-" not in span, (cpu, span)
+        else:
+            assert f'class="meter-fill progress-bar {level}"' in span, (cpu, span)
+
+
+def test_memory_meter_level_follows_the_host_thresholds() -> None:
+    cases = [
+        (90.0, "crit"),
+        (89.9, "warn"),
+        (75.0, "warn"),
+        (74.9, "ok"),
+    ]
+    for memory, word in cases:
+        row = _web_row()
+        row.pop("memory_level")
+        row["memory_used_bytes"] = int(round(memory * 10))
+        row["memory_limit_bytes"] = 1000
+        presented = present_dashboard(
+            {"containers": {"available": True, "containers": [row]}}
+        )["containers"]["containers"][0]
+        assert presented["memory_level"] == word, memory
+        assert abs(presented["memory_percent"] - memory) < 1e-9
+        html = _render("containers_desktop.html", _payload(presented))
+        assert f'class="meter-fill progress-bar level-{word}"' in html, memory
 
 
 def test_mobile_scan_line_is_one_div_with_a_span_dot() -> None:
@@ -300,6 +362,8 @@ def test_container_state_colors_live_in_containers_css() -> None:
     assert "var(--tblr-warning)" in css
     assert ".container-card {\n  position: relative;" in css
     assert "level-" not in css
+    assert ".meter-fill" not in css
+    assert ".progress-bar" not in css
 
 
 def test_view_script_source_contract() -> None:
@@ -316,7 +380,10 @@ def test_view_script_source_contract() -> None:
     assert "https://" not in source
     assert "createElement" in source
     assert "textContent" in source
-    assert "level-" not in source
+    assert "function addMeter(parent, label, percent, level)" in source
+    assert "row.cpu_level" in source
+    assert "row.memory_level" in source
+    assert '" level-" +' in source
     assert '"meter progress"' in source
     assert '"meter-fill progress-bar"' in source
     assert '"card-body"' in source

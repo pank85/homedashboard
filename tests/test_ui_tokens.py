@@ -18,6 +18,7 @@ def test_brief_token_names_present() -> None:
         "--fg",
         "--fg-muted",
         "--border",
+        "--border-strong",
         "--primary",
         "--on-primary",
         "--accent",
@@ -54,6 +55,7 @@ def test_brief_hex_values_present_in_brief_casing() -> None:
         "#F8FAFC",
         "#94A3B8",
         "#475569",
+        "#73849A",
         "#1E293B",
         "#FFFFFF",
         "#22C55E",
@@ -133,22 +135,35 @@ def test_component_selectors_present() -> None:
     for selector in (
         ".card",
         ".card-header",
-        ".stat",
         ".btn-accent",
-        ".btn-ghost",
         ".btn-danger",
-        ".btn-neutral",
-        ".badge-success",
-        ".badge-warning",
-        ".badge-danger",
-        ".badge-muted",
-        ".badge-info",
+        ".badge",
         ".table",
         ".nav",
         ".empty",
         ".meter",
     ):
         assert selector in SOURCE
+
+
+def test_dead_selectors_absent() -> None:
+    # Rules removed as unreachable by any template or JS; these must not
+    # come back. `.stat` is a prefix of `.status-dot`/`.status-*`, so match
+    # the selector token instead of a bare substring.
+    for selector in (
+        ".btn-ghost",
+        ".btn-neutral",
+        ".badge-success",
+        ".badge-warning",
+        ".badge-danger",
+        ".badge-muted",
+        ".badge-info",
+        ".empty-subtitle",
+        ".session-card",
+    ):
+        assert selector not in SOURCE
+    assert re.search(r"\.stat(?![-\w])", SOURCE) is None
+    assert ".agent-chats" not in SOURCE
 
 
 def test_card_padding_stays_on_the_card_not_its_sections() -> None:
@@ -201,3 +216,25 @@ def test_danger_fill_token_still_present_in_containers_css() -> None:
     # badges use --danger-text; the fill must not silently disappear.
     css = (STATIC_DIR / "containers.css").read_text(encoding="utf-8")
     assert "var(--tblr-danger)" in css
+
+
+def test_structural_selectors_consume_border_strong() -> None:
+    assert SOURCE.count("var(--border-strong)") >= 9
+    for selector in (
+        "section:not(.card)",
+        ".card",
+        ".card-header",
+        ".table td",
+        ".view-nav",
+        ".navbar",
+        ".container-card",
+        ".agent-card",
+        ".project-group",
+    ):
+        index = SOURCE.index(selector)
+        assert "--border-strong" in SOURCE[index : index + 600], selector
+
+
+def test_no_sticky_table_header_block() -> None:
+    assert ".table th" not in SOURCE
+    assert re.search(r"th\s*\{[^}]*position:\s*sticky", SOURCE, re.S) is None
